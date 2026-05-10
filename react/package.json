@@ -1,0 +1,20 @@
+{
+  "name": "@convex-dev/ship-react",
+  "description": "Prebuilt React widgets for the Ship feature-request component.",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/index.tsx",
+  "types": "./src/index.tsx",
+  "exports": {
+    ".": {
+      "types": "./src/index.tsx",
+      "default": "./src/index.tsx"
+    }
+  },
+  "files": ["src"],
+  "peerDependencies": {
+    "convex": "^1.34.0",
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19"
+  }
+}

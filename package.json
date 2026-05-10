@@ -1,0 +1,33 @@
+{
+  "name": "@convex-dev/ship",
+  "description": "Embeddable feature-request & voting backend as a Convex component.",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/client.ts",
+  "types": "./src/client.ts",
+  "exports": {
+    ".": {
+      "types": "./src/client.ts",
+      "default": "./src/client.ts"
+    },
+    "./convex.config": {
+      "types": "./convex.config.ts",
+      "default": "./convex.config.ts"
+    },
+    "./http": {
+      "types": "./src/http.ts",
+      "default": "./src/http.ts"
+    }
+  },
+  "files": [
+    "src",
+    "convex",
+    "convex.config.ts"
+  ],
+  "peerDependencies": {
+    "convex": "^1.35.1"
+  },
+  "devDependencies": {
+    "convex": "^1.35.1"
+  }
+}
