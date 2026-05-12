@@ -7,7 +7,7 @@ import type { GenericId } from "convex/values";
 // We intentionally do NOT import from "../_generated/api" here — that file only
 // exists after `convex dev` has run, and the client needs to be importable
 // before then. The host receives the component API from its own generated
-// `components.ship` object and passes it in.
+// `components.feedback` object and passes it in.
 type ShipApi = any;
 
 type RunQueryCtx = GenericQueryCtx<any>;
@@ -27,8 +27,8 @@ export type ItemState =
  * Host usage (inside its own query/mutation after authenticating the user):
  *
  *   import { components } from "./_generated/api";
- *   import { Ship } from "@convex-dev/ship";
- *   const ship = new Ship(components.ship);
+ *   import { Ship } from "@convex-dev/feedback";
+ *   const ship = new Ship(components.feedback);
  *   await ship.items.create(ctx, { userId, title, description });
  *
  * The host is responsible for:
@@ -47,8 +47,14 @@ export class Ship {
         title: string;
         description: string;
         autoApprove?: boolean;
+        kind?: "feature" | "refinement";
       },
     ) => ctx.runMutation(this.component.items.create, args),
+
+    listRefinementOpen: (
+      ctx: RunQueryCtx,
+      args: { limit?: number } = {},
+    ) => ctx.runQuery(this.component.items.listRefinementOpen, args),
 
     get: (ctx: RunQueryCtx, args: { itemId: GenericId<"items"> }) =>
       ctx.runQuery(this.component.items.get, args),
@@ -150,6 +156,35 @@ export class Ship {
 
     markAllRead: (ctx: RunMutationCtx, args: { userId: string }) =>
       ctx.runMutation(this.component.notifications.markAllRead, args),
+  };
+
+  todos = {
+    plan: (ctx: RunMutationCtx, args: { items: string[] }) =>
+      ctx.runMutation(this.component.todos.plan, args),
+
+    advance: (ctx: RunMutationCtx) =>
+      ctx.runMutation(this.component.todos.advance, {}),
+
+    setStatus: (
+      ctx: RunMutationCtx,
+      args: {
+        id: GenericId<"todos">;
+        status: "pending" | "active" | "done";
+      },
+    ) => ctx.runMutation(this.component.todos.setStatus, args),
+
+    listAll: (ctx: RunQueryCtx) =>
+      ctx.runQuery(this.component.todos.listAll, {}),
+  };
+
+  progress = {
+    post: (
+      ctx: RunMutationCtx,
+      args: { message: string; kind: "step" | "shipped" | "note" },
+    ) => ctx.runMutation(this.component.progress.post, args),
+
+    listRecent: (ctx: RunQueryCtx, args: { limit?: number } = {}) =>
+      ctx.runQuery(this.component.progress.listRecent, args),
   };
 
   agentKeys = {

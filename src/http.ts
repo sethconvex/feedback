@@ -5,10 +5,10 @@
  *
  *   import { httpRouter } from "convex/server";
  *   import { components } from "./_generated/api";
- *   import { mountAgentRoutes } from "@convex-dev/ship/http";
+ *   import { mountAgentRoutes } from "@convex-dev/feedback/http";
  *
  *   const http = httpRouter();
- *   mountAgentRoutes(http, components.ship);
+ *   mountAgentRoutes(http, components.feedback);
  *   export default http;
  *
  * Components can't own HTTP routes themselves — the public URL surface

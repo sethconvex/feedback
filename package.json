@@ -1,5 +1,5 @@
 {
-  "name": "@convex-dev/ship",
+  "name": "@convex-dev/feedback",
   "description": "Embeddable feature-request & voting backend as a Convex component.",
   "version": "0.0.1",
   "type": "module",

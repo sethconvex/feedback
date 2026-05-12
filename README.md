@@ -40,6 +40,44 @@ export const submit = mutation({
 
 See the [ship repo](https://github.com/get-convex/ship) for full examples (`example/` and `theseus/`).
 
+## Refinement questions
+
+Agents can ask clarifying questions through the same `items` + `devLogs`
+mechanism — just pass `kind: "refinement"` on create. The user's answer
+is posted back as a devLog on the item.
+
+```ts
+// Agent: ask
+const qId = await ship.items.create(ctx, {
+  userId: "agent",
+  title: "What kind of auth?",
+  description: "Email/password, magic links, or social?",
+  kind: "refinement",
+  autoApprove: true,
+});
+
+// User UI: answer by posting a devLog
+await ship.devLogs.post(ctx, { itemId: qId, authorId: userId, message: "magic links" });
+
+// Agent: watch for an answer
+const open = await ship.items.listRefinementOpen(ctx);
+const replies = await ship.devLogs.listForItem(ctx, { itemId: qId });
+```
+
+Refinement items are filtered out of `items.listPublic` so they never pollute
+the feature-request feed.
+
+## Build-mode UI (todos + progress)
+
+Two optional tables power a build-mode "watching the agent" UX:
+
+- `ship.todos.plan({ items })` / `.advance()` / `.listAll()` — checklist
+  the agent fills in as work progresses.
+- `ship.progress.post({ message, kind })` / `.listRecent()` — free-form
+  feed of agent updates (`"step" | "shipped" | "note"`).
+
+Both are unused in production deployments — feel free to ignore them.
+
 ## Trust model
 
 The component never reads `ctx.auth`. Every mutation takes a `userId: string` arg — the host authenticates first, then forwards a trusted ID. Works with any auth provider.
