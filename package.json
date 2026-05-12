@@ -21,8 +21,16 @@
   },
   "files": [
     "src",
-    "convex",
-    "convex.config.ts"
+    "convex.config.ts",
+    "schema.ts",
+    "items.ts",
+    "bids.ts",
+    "devLogs.ts",
+    "notifications.ts",
+    "agentKeys.ts",
+    "todos.ts",
+    "progress.ts",
+    "_generated"
   ],
   "peerDependencies": {
     "convex": "^1.35.1"
