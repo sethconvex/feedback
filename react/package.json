@@ -1,6 +1,6 @@
 {
-  "name": "@convex-dev/ship-react",
-  "description": "Prebuilt React widgets for the Ship feature-request component.",
+  "name": "@convex-dev/feedback-react",
+  "description": "Prebuilt React widgets for the @convex-dev/feedback feature-request component.",
   "version": "0.0.1",
   "type": "module",
   "main": "./src/index.tsx",

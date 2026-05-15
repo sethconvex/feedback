@@ -1,5 +1,5 @@
 /**
- * Prebuilt React widgets for the Ship feature-request component.
+ * Prebuilt React widgets for the @convex-dev/feedback feature-request component.
  *
  * These widgets are deliberately host-agnostic: the host passes in its own
  * generated-API references, so the host keeps control of auth and function

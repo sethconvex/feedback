@@ -7,8 +7,8 @@ import type { GenericId } from "convex/values";
 // We intentionally do NOT import from "../_generated/api" here — that file only
 // exists after `convex dev` has run, and the client needs to be importable
 // before then. The host receives the component API from its own generated
-// `components.ship` object and passes it in.
-type ShipApi = any;
+// `components.feedback` object and passes it in.
+type FeedbackApi = any;
 
 type RunQueryCtx = GenericQueryCtx<any>;
 type RunMutationCtx = GenericMutationCtx<any>;
@@ -22,22 +22,22 @@ export type ItemState =
   | "completed";
 
 /**
- * Thin typed wrapper around the Ship component API.
+ * Thin typed wrapper around the feedback component API.
  *
  * Host usage (inside its own query/mutation after authenticating the user):
  *
  *   import { components } from "./_generated/api";
- *   import { Ship } from "@convex-dev/ship";
- *   const ship = new Ship(components.ship);
- *   await ship.items.create(ctx, { userId, title, description });
+ *   import { Feedback } from "@convex-dev/feedback";
+ *   const feedback = new Feedback(components.feedback);
+ *   await feedback.items.create(ctx, { userId, title, description });
  *
  * The host is responsible for:
  *   - authenticating the user and passing a stable `userId` string
  *   - gating admin operations (listAll, transitionState, post dev logs)
  *   - (optional) debiting/crediting its own chip economy around bids
  */
-export class Ship {
-  constructor(public component: ShipApi) {}
+export class Feedback {
+  constructor(public component: FeedbackApi) {}
 
   items = {
     create: (

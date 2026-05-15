@@ -1,5 +1,5 @@
 {
-  "name": "@convex-dev/ship",
+  "name": "@convex-dev/feedback",
   "description": "Embeddable feature-request & voting backend as a Convex component.",
   "version": "0.0.1",
   "type": "module",
@@ -17,12 +17,29 @@
     "./http": {
       "types": "./src/http.ts",
       "default": "./src/http.ts"
+    },
+    "./react": {
+      "types": "./react/src/index.tsx",
+      "default": "./react/src/index.tsx"
+    },
+    "./_generated/component": {
+      "types": "./_generated/component.ts"
+    },
+    "./_generated/component.js": {
+      "types": "./_generated/component.ts"
     }
   },
   "files": [
     "src",
-    "convex",
-    "convex.config.ts"
+    "react",
+    "_generated",
+    "convex.config.ts",
+    "schema.ts",
+    "items.ts",
+    "bids.ts",
+    "devLogs.ts",
+    "notifications.ts",
+    "agentKeys.ts"
   ],
   "peerDependencies": {
     "convex": "^1.35.1"
