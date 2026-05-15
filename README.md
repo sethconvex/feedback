@@ -24,21 +24,19 @@ export default app;
 ```ts
 // convex/featureRequests.ts
 import { components } from "./_generated/api";
-import { Ship } from "@convex-dev/feedback";
+import { Feedback } from "@convex-dev/feedback";
 
-const ship = new Ship(components.feedback);
+const feedback = new Feedback(components.feedback);
 
 // Wrap with your own auth — the component never calls ctx.auth.
 export const submit = mutation({
   args: { title: v.string(), description: v.string() },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx); // your auth
-    return await ship.items.create(ctx, { userId, ...args });
+    return await feedback.items.create(ctx, { userId, ...args });
   },
 });
 ```
-
-See the [ship repo](https://github.com/get-convex/ship) for full examples (`example/` and `theseus/`).
 
 ## Trust model
 

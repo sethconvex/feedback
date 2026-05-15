@@ -1,14 +1,14 @@
 /**
- * HTTP route helper for hosting Ship's agent API.
+ * HTTP route helper for hosting the feedback component's agent API.
  *
  * Usage in the host's convex/http.ts:
  *
  *   import { httpRouter } from "convex/server";
  *   import { components } from "./_generated/api";
- *   import { mountAgentRoutes } from "@convex-dev/ship/http";
+ *   import { mountAgentRoutes } from "@convex-dev/feedback/http";
  *
  *   const http = httpRouter();
- *   mountAgentRoutes(http, components.ship);
+ *   mountAgentRoutes(http, components.feedback);
  *   export default http;
  *
  * Components can't own HTTP routes themselves — the public URL surface
@@ -17,7 +17,7 @@
  */
 import { httpActionGeneric, type HttpRouter } from "convex/server";
 
-type ShipApi = any;
+type FeedbackApi = any;
 type ItemState =
   | "submitted"
   | "requested"
@@ -49,7 +49,7 @@ export type MountAgentRoutesOptions = {
 
 export function mountAgentRoutes(
   http: HttpRouter,
-  component: ShipApi,
+  component: FeedbackApi,
   opts: MountAgentRoutesOptions = {},
 ) {
   const prefix = opts.prefix ?? "/agent";
