@@ -21,6 +21,12 @@
     "./react": {
       "types": "./react/src/index.tsx",
       "default": "./react/src/index.tsx"
+    },
+    "./_generated/component": {
+      "types": "./_generated/component.ts"
+    },
+    "./_generated/component.js": {
+      "types": "./_generated/component.ts"
     }
   },
   "files": [
