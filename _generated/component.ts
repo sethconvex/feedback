@@ -54,6 +54,32 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Name
       >;
     };
+    agentState: {
+      snapshot: FunctionReference<
+        "query",
+        "internal",
+        {
+          includeCompleted?: boolean;
+          limit?: number;
+          mode?: "all" | "chef" | "queue";
+        },
+        {
+          counts: {
+            inProgress: number;
+            openRefinements: number;
+            openTodos: number;
+            progress: number;
+            requested: number;
+            todos: number;
+          };
+          progress: Array<any>;
+          refinements: Array<any>;
+          requests: Array<any>;
+          todos: Array<any>;
+        },
+        Name
+      >;
+    };
     bids: {
       backfillStats: FunctionReference<
         "mutation",

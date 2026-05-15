@@ -9,12 +9,15 @@
  */
 
 import type * as agentKeys from "../agentKeys.js";
+import type * as agentState from "../agentState.js";
 import type * as bids from "../bids.js";
 import type * as devLogs from "../devLogs.js";
 import type * as items from "../items.js";
 import type * as notifications from "../notifications.js";
+import type * as progress from "../progress.js";
 import type * as src_client from "../src/client.js";
 import type * as src_http from "../src/http.js";
+import type * as todos from "../todos.js";
 
 import type {
   ApiFromModules,
@@ -25,12 +28,15 @@ import { anyApi, componentsGeneric } from "convex/server";
 
 const fullApi: ApiFromModules<{
   agentKeys: typeof agentKeys;
+  agentState: typeof agentState;
   bids: typeof bids;
   devLogs: typeof devLogs;
   items: typeof items;
   notifications: typeof notifications;
+  progress: typeof progress;
   "src/client": typeof src_client;
   "src/http": typeof src_http;
+  todos: typeof todos;
 }> = anyApi as any;
 
 /**

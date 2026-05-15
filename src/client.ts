@@ -187,6 +187,17 @@ export class Feedback {
       ctx.runQuery(this.component.progress.listRecent, args),
   };
 
+  agentState = {
+    snapshot: (
+      ctx: RunQueryCtx,
+      args: {
+        mode?: "all" | "chef" | "queue";
+        limit?: number;
+        includeCompleted?: boolean;
+      } = {},
+    ) => ctx.runQuery(this.component.agentState.snapshot, args),
+  };
+
   agentKeys = {
     list: (ctx: RunQueryCtx) =>
       ctx.runQuery(this.component.agentKeys.list, {}),
@@ -202,4 +213,3 @@ export class Feedback {
     ) => ctx.runMutation(this.component.agentKeys.revoke, args),
   };
 }
-
