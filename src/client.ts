@@ -47,8 +47,14 @@ export class Feedback {
         title: string;
         description: string;
         autoApprove?: boolean;
+        kind?: "feature" | "refinement";
       },
     ) => ctx.runMutation(this.component.items.create, args),
+
+    listRefinementOpen: (
+      ctx: RunQueryCtx,
+      args: { limit?: number } = {},
+    ) => ctx.runQuery(this.component.items.listRefinementOpen, args),
 
     get: (ctx: RunQueryCtx, args: { itemId: GenericId<"items"> }) =>
       ctx.runQuery(this.component.items.get, args),
@@ -150,6 +156,35 @@ export class Feedback {
 
     markAllRead: (ctx: RunMutationCtx, args: { userId: string }) =>
       ctx.runMutation(this.component.notifications.markAllRead, args),
+  };
+
+  todos = {
+    plan: (ctx: RunMutationCtx, args: { items: string[] }) =>
+      ctx.runMutation(this.component.todos.plan, args),
+
+    advance: (ctx: RunMutationCtx) =>
+      ctx.runMutation(this.component.todos.advance, {}),
+
+    setStatus: (
+      ctx: RunMutationCtx,
+      args: {
+        id: GenericId<"todos">;
+        status: "pending" | "active" | "done";
+      },
+    ) => ctx.runMutation(this.component.todos.setStatus, args),
+
+    listAll: (ctx: RunQueryCtx) =>
+      ctx.runQuery(this.component.todos.listAll, {}),
+  };
+
+  progress = {
+    post: (
+      ctx: RunMutationCtx,
+      args: { message: string; kind: "step" | "shipped" | "note" },
+    ) => ctx.runMutation(this.component.progress.post, args),
+
+    listRecent: (ctx: RunQueryCtx, args: { limit?: number } = {}) =>
+      ctx.runQuery(this.component.progress.listRecent, args),
   };
 
   agentKeys = {

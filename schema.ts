@@ -28,6 +28,9 @@ export default defineSchema({
     createdBy: v.string(),
     completedAt: v.optional(v.number()),
     mergedInto: v.optional(v.id("items")),
+    // "feature" (default) for normal requests; "refinement" for agent-asked
+    // clarifying questions that use devLogs as the answer thread.
+    kind: v.optional(v.union(v.literal("feature"), v.literal("refinement"))),
     // Denormalized stats — updated atomically inside bid mutations so reads
     // never have to join on the bids table. Optional for documents that
     // predate this migration.
@@ -36,7 +39,8 @@ export default defineSchema({
   })
     .index("by_state", ["state"])
     .index("by_createdBy", ["createdBy"])
-    .index("by_number", ["number"]),
+    .index("by_number", ["number"])
+    .index("by_kind_and_state", ["kind", "state"]),
 
   bids: defineTable({
     itemId: v.id("items"),
@@ -77,4 +81,33 @@ export default defineSchema({
     lastUsedAt: v.optional(v.number()),
     revoked: v.boolean(),
   }).index("by_key", ["key"]),
+
+  // ----------- wow-shell mechanisms (build-mode UX, optional in prod) -----------
+  //
+  // Refinement questions reuse `items` (with kind="refinement") + `devLogs`
+  // (as the answer thread) — no new table needed. See README "Refinement
+  // questions" section.
+
+  // Agent-planned checklist the user sees fill in as work progresses.
+  // One row per item, ordered. Three states: pending / active / done.
+  todos: defineTable({
+    text: v.string(),
+    order: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("active"),
+      v.literal("done"),
+    ),
+  }).index("by_order", ["order"]),
+
+  // Free-form agent progress feed (separate from per-item devLogs).
+  // Latest N rows render at the top of the floating Chef bubble.
+  progressUpdates: defineTable({
+    message: v.string(),
+    kind: v.union(
+      v.literal("step"),
+      v.literal("shipped"),
+      v.literal("note"),
+    ),
+  }),
 });

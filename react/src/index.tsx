@@ -15,6 +15,18 @@ import * as React from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReference } from "convex/server";
 
+// The build-mode floating panel (todos / refinement questions / requests).
+// Lives in its own file because it's a different shape from the
+// feature-request widgets — it talks to the wow-shell wrapper functions.
+export { ChefPanel } from "./ChefPanel.js";
+export type {
+  ChefPanelApi,
+  ChefRefinement,
+  ChefRequest,
+  ChefTodo,
+  ChefProgress,
+} from "./ChefPanel.js";
+
 type AnyQuery<Args extends Record<string, any>, Returns = any> =
   FunctionReference<"query", "public", Args, Returns>;
 type AnyMutation<Args extends Record<string, any>, Returns = any> =

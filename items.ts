@@ -64,6 +64,7 @@ export const create = mutation({
     title: v.string(),
     description: v.string(),
     autoApprove: v.optional(v.boolean()),
+    kind: v.optional(v.union(v.literal("feature"), v.literal("refinement"))),
   },
   returns: v.id("items"),
   handler: async (ctx, args) => {
@@ -74,6 +75,7 @@ export const create = mutation({
       description: args.description,
       state: args.autoApprove ? "requested" : "submitted",
       createdBy: args.userId,
+      kind: args.kind ?? "feature",
       totalAmount: 0,
       supporterCount: 0,
     });
@@ -148,7 +150,10 @@ export const listPublic = query({
     const raw: Doc<"items">[] = await q.take(limit * 3);
     const visible = raw.filter(
       (i) =>
-        i.state !== "submitted" && i.state !== "rejected" && !i.mergedInto,
+        i.state !== "submitted" &&
+        i.state !== "rejected" &&
+        !i.mergedInto &&
+        i.kind !== "refinement",
     );
     const page = visible.slice(0, limit).map(enrich);
     const nextCursor =
@@ -331,6 +336,38 @@ export const boost = mutation({
       stamp: Date.now(),
     });
     return newTotal;
+  },
+});
+
+// Refinement items (kind="refinement") are agent-asked clarifying questions.
+// The answer thread lives in `devLogs` keyed to the item. Open = submitted
+// or requested; rejected = skipped; completed = answered & consumed.
+export const listRefinementOpen = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.min(50, Math.max(1, args.limit ?? 20));
+    // Two states count as "open": submitted (just asked) and requested
+    // (host marked it as actively awaiting an answer). We fetch both via
+    // the by_kind_and_state index and merge.
+    const submitted = await ctx.db
+      .query("items")
+      .withIndex("by_kind_and_state", (q) =>
+        q.eq("kind", "refinement").eq("state", "submitted"),
+      )
+      .order("desc")
+      .take(limit);
+    const requested = await ctx.db
+      .query("items")
+      .withIndex("by_kind_and_state", (q) =>
+        q.eq("kind", "refinement").eq("state", "requested"),
+      )
+      .order("desc")
+      .take(limit);
+    const merged = [...submitted, ...requested]
+      .filter((i) => !i.mergedInto)
+      .sort((a, b) => b._creationTime - a._creationTime)
+      .slice(0, limit);
+    return merged.map(enrich);
   },
 });
 

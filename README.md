@@ -38,6 +38,71 @@ export const submit = mutation({
 });
 ```
 
+## Refinement questions
+
+Agents can ask clarifying questions through the same `items` + `devLogs`
+mechanism — just pass `kind: "refinement"` on create. The user's answer
+is posted back as a devLog on the item.
+
+```ts
+// Agent: ask
+const qId = await feedback.items.create(ctx, {
+  userId: "agent",
+  title: "What kind of auth?",
+  description: "Email/password, magic links, or social?",
+  kind: "refinement",
+  autoApprove: true,
+});
+
+// User UI: answer by posting a devLog
+await feedback.devLogs.post(ctx, { itemId: qId, authorId: userId, message: "magic links" });
+
+// Agent: watch for an answer
+const open = await feedback.items.listRefinementOpen(ctx);
+const replies = await feedback.devLogs.listForItem(ctx, { itemId: qId });
+```
+
+Refinement items are filtered out of `items.listPublic` so they never pollute
+the feature-request feed.
+
+## Build-mode UI (todos + progress)
+
+Two optional tables power a build-mode "watching the agent" UX:
+
+- `feedback.todos.plan({ items })` / `.advance()` / `.listAll()` — checklist
+  the agent fills in as work progresses.
+- `feedback.progress.post({ message, kind })` / `.listRecent()` — free-form
+  feed of agent updates (`"step" | "shipped" | "note"`).
+
+Both are unused in production deployments — feel free to ignore them.
+
+### `ChefPanel` widget
+
+`@convex-dev/feedback-react` ships a `ChefPanel` — a floating bubble with
+three tabs (Building / Asking / Request) that renders todos, refinement
+questions, the progress feed, and feature requests. Like the other
+widgets it's host-agnostic: pass your own wrapper-function refs.
+
+```tsx
+import { ChefPanel } from "@convex-dev/feedback-react";
+import { api } from "./convex/_generated/api";
+
+// Your host exposes a wrapper module (the wow-shell convention is
+// `convex/wow.ts`) with these public functions:
+<ChefPanel
+  api={{
+    listOpenRefinements: api.wow.listOpenRefinements,
+    answerRefinement: api.wow.answerRefinement,
+    skipRefinement: api.wow.skipRefinement,
+    listPublicItems: api.wow.listPublicItems,
+    submitRequest: api.wow.submitRequest,
+    upvoteRequest: api.wow.upvoteRequest,
+    listProgress: api.wow.listProgress,
+    listTodos: api.wow.listTodos,
+  }}
+/>
+```
+
 ## Trust model
 
 The component never reads `ctx.auth`. Every mutation takes a `userId: string` arg — the host authenticates first, then forwards a trusted ID. Works with any auth provider.

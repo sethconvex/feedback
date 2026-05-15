@@ -1,6 +1,6 @@
 {
   "name": "@convex-dev/feedback-react",
-  "description": "Prebuilt React widgets for the @convex-dev/feedback feature-request component.",
+  "description": "Prebuilt React widgets for the @convex-dev/feedback component.",
   "version": "0.0.1",
   "type": "module",
   "main": "./src/index.tsx",
