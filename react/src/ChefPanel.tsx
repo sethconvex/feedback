@@ -29,6 +29,29 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReference } from "convex/server";
 
+// localStorage key for the panel's collapsed/expanded toggle. SSR-safe and
+// swallows storage errors (Safari private mode, quota, disabled storage)
+// so a broken storage layer never crashes the widget.
+const COLLAPSED_STORAGE_KEY = "convex-feedback:chef-panel:collapsed";
+
+function readCollapsedFromStorage(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(COLLAPSED_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeCollapsedToStorage(collapsed: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(COLLAPSED_STORAGE_KEY, collapsed ? "1" : "0");
+  } catch {
+    // ignore — quota / disabled / private mode
+  }
+}
+
 type AnyQuery<Args extends Record<string, any>, Returns = any> =
   FunctionReference<"query", "public", Args, Returns>;
 type AnyMutation<Args extends Record<string, any>, Returns = any> =
@@ -82,7 +105,13 @@ export function ChefPanel({ api }: { api: ChefPanelApi }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [reqText, setReqText] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  // Persist the collapsed state across reloads — without this the panel
+  // springs back open on every navigation, which is noisy in build mode
+  // where the user typically wants it tucked away.
+  const [collapsed, setCollapsed] = useState<boolean>(readCollapsedFromStorage);
+  useEffect(() => {
+    writeCollapsedToStorage(collapsed);
+  }, [collapsed]);
 
   const openQuestions = (openQs ?? []).filter((q) => q.state === "open");
   const openCount = openQuestions.length;
