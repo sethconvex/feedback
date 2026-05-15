@@ -39,6 +39,7 @@
     "devLogs.ts",
     "notifications.ts",
     "agentKeys.ts",
+    "agentState.ts",
     "todos.ts",
     "progress.ts",
     "_generated"

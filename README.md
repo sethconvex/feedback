@@ -73,6 +73,17 @@ Two optional tables power a build-mode "watching the agent" UX:
   the agent fills in as work progresses.
 - `feedback.progress.post({ message, kind })` / `.listRecent()` — free-form
   feed of agent updates (`"step" | "shipped" | "note"`).
+- `feedback.agentState.snapshot({ mode, limit })` — a CLI-friendly read model
+  of todos, progress, refinement questions, and requested/in-progress work.
+  Hosts can expose it with a tiny wrapper query so coding agents can inspect
+  Chef state with `npx convex run`, without requiring browser auth:
+
+```ts
+export const chefAgentState = query({
+  args: { limit: v.optional(v.number()) },
+  handler: (ctx, args) => feedback.agentState.snapshot(ctx, args),
+});
+```
 
 Both are unused in production deployments — feel free to ignore them.
 
