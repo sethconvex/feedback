@@ -21,6 +21,8 @@ export type ItemState =
   | "rejected"
   | "completed";
 
+export type ActorArgs = { viewer?: string | null; agentKey?: string };
+
 /**
  * Thin typed wrapper around the feedback component API.
  *
@@ -39,6 +41,21 @@ export type ItemState =
 export class Feedback {
   constructor(public component: FeedbackApi) {}
 
+  // Identity + roles. Host forwards the authenticated userId (never ctx.auth).
+  // First user to `ensure` becomes admin; the rest are members.
+  users = {
+    ensure: (ctx: RunMutationCtx, args: { userId: string }) =>
+      ctx.runMutation(this.component.users.ensure, args),
+    get: (ctx: RunQueryCtx, args: { userId: string }) =>
+      ctx.runQuery(this.component.users.get, args),
+    count: (ctx: RunQueryCtx) =>
+      ctx.runQuery(this.component.users.count, {}),
+    setRole: (
+      ctx: RunMutationCtx,
+      args: { userId: string; role: "admin" | "member" },
+    ) => ctx.runMutation(this.component.users.setRole, args),
+  };
+
   items = {
     create: (
       ctx: RunMutationCtx,
@@ -53,7 +70,7 @@ export class Feedback {
 
     listRefinementOpen: (
       ctx: RunQueryCtx,
-      args: { limit?: number } = {},
+      args: { limit?: number } & ActorArgs = {},
     ) => ctx.runQuery(this.component.items.listRefinementOpen, args),
 
     get: (ctx: RunQueryCtx, args: { itemId: GenericId<"items"> }) =>
@@ -71,12 +88,12 @@ export class Feedback {
 
     listByState: (
       ctx: RunQueryCtx,
-      args: { state: ItemState; limit?: number; cursor?: string | null },
+      args: { state: ItemState; limit?: number; cursor?: string | null } & ActorArgs,
     ) => ctx.runQuery(this.component.items.listByState, args),
 
     listAll: (
       ctx: RunQueryCtx,
-      args: { limit?: number; cursor?: string | null } = {},
+      args: { limit?: number; cursor?: string | null } & ActorArgs = {},
     ) => ctx.runQuery(this.component.items.listAll, args),
 
     countByState: (ctx: RunQueryCtx, args: { state: ItemState }) =>
@@ -194,7 +211,7 @@ export class Feedback {
         mode?: "all" | "chef" | "queue";
         limit?: number;
         includeCompleted?: boolean;
-      } = {},
+      } & ActorArgs = {},
     ) => ctx.runQuery(this.component.agentState.snapshot, args),
   };
 

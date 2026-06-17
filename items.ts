@@ -2,6 +2,15 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { vState } from "./schema";
 import type { Doc, Id } from "./_generated/dataModel";
+import { requirePrivileged } from "./access";
+
+// Args every "list all active" read accepts so the component can enforce that
+// only admins or agents see the full queue (the host forwards a trusted viewer
+// and/or an agentKey).
+const actorArgs = {
+  viewer: v.optional(v.union(v.string(), v.null())),
+  agentKey: v.optional(v.string()),
+};
 
 async function nextItemNumber(ctx: any): Promise<number> {
   const counter = await ctx.db
@@ -107,9 +116,11 @@ export const listByState = query({
     state: vState,
     limit: v.optional(v.number()),
     cursor: v.optional(v.union(v.string(), v.null())),
+    ...actorArgs,
   },
   returns: listReturnShape,
   handler: async (ctx, args) => {
+    await requirePrivileged(ctx, args); // admins/agents only — full active queue
     const limit = Math.min(100, Math.max(1, args.limit ?? 20));
     const cursor = args.cursor ? Number(args.cursor) : null;
     const q = ctx.db
@@ -168,9 +179,11 @@ export const listAll = query({
   args: {
     limit: v.optional(v.number()),
     cursor: v.optional(v.union(v.string(), v.null())),
+    ...actorArgs,
   },
   returns: listReturnShape,
   handler: async (ctx, args) => {
+    await requirePrivileged(ctx, args); // admins/agents only
     const limit = Math.min(200, Math.max(1, args.limit ?? 100));
     const cursor = args.cursor ? Number(args.cursor) : null;
     let q = ctx.db.query("items").order("desc");
@@ -343,8 +356,9 @@ export const boost = mutation({
 // The answer thread lives in `devLogs` keyed to the item. Open = submitted
 // or requested; rejected = skipped; completed = answered & consumed.
 export const listRefinementOpen = query({
-  args: { limit: v.optional(v.number()) },
+  args: { limit: v.optional(v.number()), ...actorArgs },
   handler: async (ctx, args) => {
+    await requirePrivileged(ctx, args); // open refinements = build-mode, admin/agent only
     const limit = Math.min(50, Math.max(1, args.limit ?? 20));
     // Two states count as "open": submitted (just asked) and requested
     // (host marked it as actively awaiting an answer). We fetch both via

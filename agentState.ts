@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import { buildStatusVisible } from "./access";
 
 const vMode = v.union(
   v.literal("all"),
@@ -26,6 +27,10 @@ export const snapshot = query({
     mode: v.optional(vMode),
     limit: v.optional(v.number()),
     includeCompleted: v.optional(v.boolean()),
+    // Build status is visible to admins/agents always, and to everyone only
+    // while there are no users yet. Host forwards the viewer / agentKey.
+    viewer: v.optional(v.union(v.string(), v.null())),
+    agentKey: v.optional(v.string()),
   },
   returns: v.object({
     todos: v.array(v.any()),
@@ -42,6 +47,23 @@ export const snapshot = query({
     }),
   }),
   handler: async (ctx, args) => {
+    // Hide build status from ordinary visitors once real users exist.
+    if (!(await buildStatusVisible(ctx, args))) {
+      return {
+        todos: [],
+        progress: [],
+        refinements: [],
+        requests: [],
+        counts: {
+          todos: 0,
+          openTodos: 0,
+          progress: 0,
+          openRefinements: 0,
+          requested: 0,
+          inProgress: 0,
+        },
+      };
+    }
     const mode = args.mode ?? "all";
     const limit = clampLimit(args.limit, 20, 100);
     const includeCompleted = args.includeCompleted ?? false;

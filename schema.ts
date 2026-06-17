@@ -20,6 +20,15 @@ export const vNotificationType = v.union(
 );
 
 export default defineSchema({
+  // Who's who. The host forwards a trusted userId (never ctx.auth); the first
+  // registered user is the admin (creator), the rest are members. Roles gate
+  // the "list all active" and "build status" visibility rules (see access.ts).
+  users: defineTable({
+    userId: v.string(),
+    role: v.union(v.literal("admin"), v.literal("member")),
+    createdAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
   items: defineTable({
     number: v.number(),
     title: v.string(),
