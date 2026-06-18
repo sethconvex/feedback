@@ -44,8 +44,7 @@
     "progress.ts",
     "_generated",
     "users.ts",
-    "access.ts",
-    "panel"
+    "access.ts"
   ],
   "peerDependencies": {
     "convex": "^1.35.1"
