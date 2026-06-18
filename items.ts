@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { vState } from "./schema";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requirePrivileged } from "./access";
+import { requirePrivileged, buildStatusVisible } from "./access";
 
 // Args every "list all active" read accepts so the component can enforce that
 // only admins or agents see the full queue (the host forwards a trusted viewer
@@ -358,7 +358,10 @@ export const boost = mutation({
 export const listRefinementOpen = query({
   args: { limit: v.optional(v.number()), ...actorArgs },
   handler: async (ctx, args) => {
-    await requirePrivileged(ctx, args); // open refinements = build-mode, admin/agent only
+    // Build-mode chrome: visible to admins/agents always, and to anyone while
+    // there are no users yet (same gate as agentState) so the scaffolding agent
+    // can read answers without a provisioned key. Once users exist, key required.
+    if (!(await buildStatusVisible(ctx, args))) return [];
     const limit = Math.min(50, Math.max(1, args.limit ?? 20));
     // Two states count as "open": submitted (just asked) and requested
     // (host marked it as actively awaiting an answer). We fetch both via
