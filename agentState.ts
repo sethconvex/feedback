@@ -87,10 +87,30 @@ export const snapshot = query({
             .withIndex("by_kind_and_state", (q) => q.eq("kind", "refinement"))
             .order("desc")
             .take(limit * 3);
-    const refinements = refinementsRaw
+    // Refinements feed the build-mode Chef panel, whose contract is
+    //   { _id, text, answer?, state: "open" | "answered" | "skipped" }.
+    // The raw `items` rows don't carry the answer (it lives in `devLogs`) and
+    // use the lifecycle state ("requested"/"completed"/"rejected"), so fold the
+    // latest devLog in and normalize `state` here. Without this the panel never
+    // sees a submitted answer: it keeps `state: "requested"`, shows the empty
+    // input on every reload, and the user re-answers into a void.
+    const refinementItems = refinementsRaw
       .filter((item) => includeCompleted || item.state !== "completed")
       .filter((item) => includeCompleted || item.state !== "rejected")
       .slice(0, limit);
+    const refinements = await Promise.all(
+      refinementItems.map(async (item) => {
+        const lastLog = await ctx.db
+          .query("devLogs")
+          .withIndex("by_item", (q) => q.eq("itemId", item._id))
+          .order("desc")
+          .take(1);
+        const answer = lastLog.length ? lastLog[0].message : undefined;
+        const state: "open" | "answered" | "skipped" =
+          item.state === "rejected" ? "skipped" : answer ? "answered" : "open";
+        return { ...item, text: item.title, answer, state };
+      }),
+    );
 
     const queueStates: Array<"requested" | "inProgress"> = [
       "requested",
@@ -120,9 +140,8 @@ export const snapshot = query({
         todos: todos.length,
         openTodos: todos.filter((todo) => todo.status !== "done").length,
         progress: progress.length,
-        openRefinements: refinements.filter(
-          (item) => item.state !== "completed" && item.state !== "rejected",
-        ).length,
+        openRefinements: refinements.filter((item) => item.state === "open")
+          .length,
         requested: requests.filter((item) => item.state === "requested").length,
         inProgress: requests.filter((item) => item.state === "inProgress").length,
       },
