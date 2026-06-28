@@ -83,8 +83,21 @@ export class Feedback {
 
     listPublic: (
       ctx: RunQueryCtx,
-      args: { limit?: number; cursor?: string | null } = {},
+      args: {
+        limit?: number;
+        cursor?: string | null;
+        // Include pre-triage "community" requests (dedup board). The host
+        // forwards the owner's setting.
+        includeCommunity?: boolean;
+      } = {},
     ) => ctx.runQuery(this.component.items.listPublic, args),
+
+    // Owner Console prioritization feed: submitted + requested, votes-sorted.
+    // Privileged — the component enforces admin/agent via the forwarded actor.
+    listForTriage: (
+      ctx: RunQueryCtx,
+      args: { limit?: number } & ActorArgs = {},
+    ) => ctx.runQuery(this.component.items.listForTriage, args),
 
     listByState: (
       ctx: RunQueryCtx,
@@ -221,12 +234,33 @@ export class Feedback {
 
     create: (
       ctx: RunMutationCtx,
-      args: { name: string; adminUserId: string },
+      args: {
+        name: string;
+        adminUserId: string;
+        // Defaults to build-only. Pass ["build","triage"] to mint a key that
+        // may also approve/reject — the owner does this deliberately.
+        scopes?: Array<"build" | "triage">;
+      },
     ) => ctx.runMutation(this.component.agentKeys.create, args),
 
     revoke: (
       ctx: RunMutationCtx,
       args: { id: GenericId<"agentKeys"> },
     ) => ctx.runMutation(this.component.agentKeys.revoke, args),
+  };
+
+  // Owner-controlled settings (community-board visibility + run-mode). `set` is
+  // host-admin-gated; `get` is unprivileged (values are not sensitive).
+  settings = {
+    get: (ctx: RunQueryCtx) =>
+      ctx.runQuery(this.component.settings.get, {}),
+
+    set: (
+      ctx: RunMutationCtx,
+      args: {
+        communityBoardVisible?: boolean;
+        runMode?: "local" | "cloud";
+      },
+    ) => ctx.runMutation(this.component.settings.set, args),
   };
 }
