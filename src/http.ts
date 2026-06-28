@@ -57,7 +57,9 @@ export function mountAgentRoutes(
   async function verify(
     ctx: any,
     req: Request,
-  ): Promise<{ agentId: string; keyId: string } | Response> {
+  ): Promise<
+    { agentId: string; keyId: string; scopes: string[] } | Response
+  > {
     const header = req.headers.get("authorization") ?? "";
     const match = header.match(/^Bearer\s+(\S+)$/i);
     if (!match) return json({ error: "Missing Bearer token" }, 401);
@@ -70,6 +72,9 @@ export function mountAgentRoutes(
     return {
       agentId: `${AGENT_USER_PREFIX}${record.name || record._id}`,
       keyId: record._id,
+      // Default keys are build-only. Triage (approve/reject) requires the owner
+      // to have minted a key with the explicit "triage" scope.
+      scopes: record.scopes ?? ["build"],
     };
   }
 
@@ -103,6 +108,12 @@ export function mountAgentRoutes(
   const triage = httpActionGeneric(async (ctx, req) => {
     const auth = await verify(ctx, req);
     if (auth instanceof Response) return auth;
+    if (!auth.scopes.includes("triage")) {
+      return json(
+        { error: "Key lacks triage scope; only the owner approves work." },
+        403,
+      );
+    }
 
     const body = (await req.json().catch(() => null)) as any;
     if (!body?.itemId || !body?.decision) {
