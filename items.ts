@@ -114,11 +114,26 @@ export const create = mutation({
   returns: v.id("items"),
   handler: async (ctx, args) => {
     const number = await nextItemNumber(ctx);
+    // Security: only an ADMIN may auto-approve a request straight onto the
+    // triage/build queue ("requested"). A member's/guest's `autoApprove` is
+    // IGNORED — their request stays "submitted" (the pre-triage community
+    // bucket) until an admin approves it. This closes a prompt-injection surface:
+    // a non-admin cannot push arbitrary text into the state the build agent (and
+    // owner tooling) acts on, even if a host mistakenly passes autoApprove:true
+    // for them. Approval stays owner-controlled by construction.
+    let approved = false;
+    if (args.autoApprove) {
+      const u = await ctx.db
+        .query("users")
+        .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+        .unique();
+      approved = u?.role === "admin";
+    }
     return await ctx.db.insert("items", {
       number,
       title: args.title,
       description: args.description,
-      state: args.autoApprove ? "requested" : "submitted",
+      state: approved ? "requested" : "submitted",
       createdBy: args.userId,
       kind: args.kind ?? "feature",
       totalAmount: 0,
