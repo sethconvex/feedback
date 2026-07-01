@@ -42,7 +42,10 @@
     "agentState.ts",
     "todos.ts",
     "progress.ts",
-    "_generated"
+    "_generated",
+    "users.ts",
+    "access.ts",
+    "settings.ts"
   ],
   "peerDependencies": {
     "convex": "^1.35.1"

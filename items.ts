@@ -2,6 +2,15 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { vState } from "./schema";
 import type { Doc, Id } from "./_generated/dataModel";
+import { requirePrivileged, buildStatusVisible } from "./access";
+
+// Args every "list all active" read accepts so the component can enforce that
+// only admins or agents see the full queue (the host forwards a trusted viewer
+// and/or an agentKey).
+const actorArgs = {
+  viewer: v.optional(v.union(v.string(), v.null())),
+  agentKey: v.optional(v.string()),
+};
 
 async function nextItemNumber(ctx: any): Promise<number> {
   const counter = await ctx.db
@@ -24,6 +33,42 @@ function enrich(item: Doc<"items">) {
       totalAmount: item.totalAmount ?? 0,
       supporterCount: item.supporterCount ?? 0,
     },
+  };
+}
+
+// Coarse, user-facing lifecycle. Deliberately NOT the raw state, and NEVER a
+// queue position — a vote is a signal, not a delivery promise. rejected /
+// refinement / merged map to null = hidden from the public board.
+type PublicStatus = "community" | "planned" | "building" | "shipped";
+function publicStatus(item: Doc<"items">): PublicStatus | null {
+  if (item.mergedInto || item.kind === "refinement") return null;
+  switch (item.state) {
+    case "submitted":
+      return "community"; // requested by community, pre-triage
+    case "requested":
+    case "planned":
+      return "planned";
+    case "inProgress":
+      return "building";
+    case "completed":
+      return "shipped";
+    case "rejected":
+      return null;
+  }
+}
+
+// Public-safe shape: requester identity (`createdBy`) and raw `state` are
+// Owner-Console-only. The public board gets title, vote total, and a coarse
+// status label.
+function toPublic(item: Doc<"items">) {
+  return {
+    _id: item._id,
+    number: item.number,
+    title: item.title,
+    description: item.description,
+    publicStatus: publicStatus(item),
+    voteCount: item.totalAmount ?? 0,
+    supporterCount: item.supporterCount ?? 0,
   };
 }
 
@@ -69,11 +114,26 @@ export const create = mutation({
   returns: v.id("items"),
   handler: async (ctx, args) => {
     const number = await nextItemNumber(ctx);
+    // Security: only an ADMIN may auto-approve a request straight onto the
+    // triage/build queue ("requested"). A member's/guest's `autoApprove` is
+    // IGNORED — their request stays "submitted" (the pre-triage community
+    // bucket) until an admin approves it. This closes a prompt-injection surface:
+    // a non-admin cannot push arbitrary text into the state the build agent (and
+    // owner tooling) acts on, even if a host mistakenly passes autoApprove:true
+    // for them. Approval stays owner-controlled by construction.
+    let approved = false;
+    if (args.autoApprove) {
+      const u = await ctx.db
+        .query("users")
+        .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+        .unique();
+      approved = u?.role === "admin";
+    }
     return await ctx.db.insert("items", {
       number,
       title: args.title,
       description: args.description,
-      state: args.autoApprove ? "requested" : "submitted",
+      state: approved ? "requested" : "submitted",
       createdBy: args.userId,
       kind: args.kind ?? "feature",
       totalAmount: 0,
@@ -107,9 +167,11 @@ export const listByState = query({
     state: vState,
     limit: v.optional(v.number()),
     cursor: v.optional(v.union(v.string(), v.null())),
+    ...actorArgs,
   },
   returns: listReturnShape,
   handler: async (ctx, args) => {
+    await requirePrivileged(ctx, args); // admins/agents only — full active queue
     const limit = Math.min(100, Math.max(1, args.limit ?? 20));
     const cursor = args.cursor ? Number(args.cursor) : null;
     const q = ctx.db
@@ -136,6 +198,9 @@ export const listPublic = query({
   args: {
     limit: v.optional(v.number()),
     cursor: v.optional(v.union(v.string(), v.null())),
+    // Owner setting (host forwards it). When false, pre-triage requests stay
+    // private and only planned/building/shipped show publicly.
+    includeCommunity: v.optional(v.boolean()),
   },
   returns: listReturnShape,
   handler: async (ctx, args) => {
@@ -150,12 +215,15 @@ export const listPublic = query({
     const raw: Doc<"items">[] = await q.take(limit * 3);
     const visible = raw.filter(
       (i) =>
-        i.state !== "submitted" &&
+        // `submitted` is the community bucket — shown for dedup so users vote on
+        // an existing request instead of filing a duplicate. rejected items and
+        // refinements are never public.
+        (args.includeCommunity || i.state !== "submitted") &&
         i.state !== "rejected" &&
         !i.mergedInto &&
         i.kind !== "refinement",
     );
-    const page = visible.slice(0, limit).map(enrich);
+    const page = visible.slice(0, limit).map(toPublic);
     const nextCursor =
       raw.length >= limit * 3
         ? String(raw[raw.length - 1]._creationTime)
@@ -164,13 +232,40 @@ export const listPublic = query({
   },
 });
 
+// Owner Console prioritization feed: everything awaiting an owner decision
+// (`submitted`) plus approved-not-yet-built (`requested`), highest-voted first.
+// Privileged — carries requester identity + raw state for the triage UI.
+export const listForTriage = query({
+  args: { limit: v.optional(v.number()), ...actorArgs },
+  returns: v.array(v.any()),
+  handler: async (ctx, args) => {
+    await requirePrivileged(ctx, args);
+    const limit = Math.min(100, Math.max(1, args.limit ?? 50));
+    const submitted = await ctx.db
+      .query("items")
+      .withIndex("by_state", (q) => q.eq("state", "submitted"))
+      .take(limit);
+    const requested = await ctx.db
+      .query("items")
+      .withIndex("by_state", (q) => q.eq("state", "requested"))
+      .take(limit);
+    return [...submitted, ...requested]
+      .filter((i) => !i.mergedInto && i.kind !== "refinement")
+      .map(enrich)
+      .sort((a, b) => b.stats.totalAmount - a.stats.totalAmount)
+      .slice(0, limit);
+  },
+});
+
 export const listAll = query({
   args: {
     limit: v.optional(v.number()),
     cursor: v.optional(v.union(v.string(), v.null())),
+    ...actorArgs,
   },
   returns: listReturnShape,
   handler: async (ctx, args) => {
+    await requirePrivileged(ctx, args); // admins/agents only
     const limit = Math.min(200, Math.max(1, args.limit ?? 100));
     const cursor = args.cursor ? Number(args.cursor) : null;
     let q = ctx.db.query("items").order("desc");
@@ -343,8 +438,12 @@ export const boost = mutation({
 // The answer thread lives in `devLogs` keyed to the item. Open = submitted
 // or requested; rejected = skipped; completed = answered & consumed.
 export const listRefinementOpen = query({
-  args: { limit: v.optional(v.number()) },
+  args: { limit: v.optional(v.number()), ...actorArgs },
   handler: async (ctx, args) => {
+    // Build-mode chrome: visible to admins/agents always, and to anyone while
+    // there are no users yet (same gate as agentState) so the scaffolding agent
+    // can read answers without a provisioned key. Once users exist, key required.
+    if (!(await buildStatusVisible(ctx, args))) return [];
     const limit = Math.min(50, Math.max(1, args.limit ?? 20));
     // Two states count as "open": submitted (just asked) and requested
     // (host marked it as actively awaiting an answer). We fetch both via

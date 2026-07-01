@@ -20,6 +20,15 @@ export const vNotificationType = v.union(
 );
 
 export default defineSchema({
+  // Who's who. The host forwards a trusted userId (never ctx.auth); the first
+  // registered user is the admin (creator), the rest are members. Roles gate
+  // the "list all active" and "build status" visibility rules (see access.ts).
+  users: defineTable({
+    userId: v.string(),
+    role: v.union(v.literal("admin"), v.literal("member")),
+    createdAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
   items: defineTable({
     number: v.number(),
     title: v.string(),
@@ -80,6 +89,27 @@ export default defineSchema({
     createdBy: v.string(),
     lastUsedAt: v.optional(v.number()),
     revoked: v.boolean(),
+    // Capability scope. "build" (default) = queue/claim/log/complete only.
+    // "triage" additionally lets a delegated agent approve/reject — the owner
+    // grants it explicitly, it is never the default. This is what keeps
+    // approval the owner-only authorization gate: a build key cannot
+    // self-authorize its own work.
+    scopes: v.optional(
+      v.array(v.union(v.literal("build"), v.literal("triage"))),
+    ),
+  }).index("by_key", ["key"]),
+
+  // Owner-controlled settings. Single row (key:"singleton"). Read by the host
+  // wrapper to decide public-board visibility and which worker drives builds.
+  settings: defineTable({
+    key: v.literal("singleton"),
+    // Show pre-triage "community" requests on the public board (helps dedup) vs
+    // keep them private until the owner approves. Default true.
+    communityBoardVisible: v.boolean(),
+    // Where approved work executes. "local" = the owner's terminal agent pulls
+    // /agent/queue (no inbound execution surface); "cloud" = a managed sandbox
+    // worker. Default "local".
+    runMode: v.union(v.literal("local"), v.literal("cloud")),
   }).index("by_key", ["key"]),
 
   // ----------- wow-shell mechanisms (build-mode UX, optional in prod) -----------

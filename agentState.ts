@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import { buildStatusVisible } from "./access";
 
 const vMode = v.union(
   v.literal("all"),
@@ -26,6 +27,10 @@ export const snapshot = query({
     mode: v.optional(vMode),
     limit: v.optional(v.number()),
     includeCompleted: v.optional(v.boolean()),
+    // Build status is visible to admins/agents always, and to everyone only
+    // while there are no users yet. Host forwards the viewer / agentKey.
+    viewer: v.optional(v.union(v.string(), v.null())),
+    agentKey: v.optional(v.string()),
   },
   returns: v.object({
     todos: v.array(v.any()),
@@ -42,6 +47,23 @@ export const snapshot = query({
     }),
   }),
   handler: async (ctx, args) => {
+    // Hide build status from ordinary visitors once real users exist.
+    if (!(await buildStatusVisible(ctx, args))) {
+      return {
+        todos: [],
+        progress: [],
+        refinements: [],
+        requests: [],
+        counts: {
+          todos: 0,
+          openTodos: 0,
+          progress: 0,
+          openRefinements: 0,
+          requested: 0,
+          inProgress: 0,
+        },
+      };
+    }
     const mode = args.mode ?? "all";
     const limit = clampLimit(args.limit, 20, 100);
     const includeCompleted = args.includeCompleted ?? false;
@@ -65,10 +87,30 @@ export const snapshot = query({
             .withIndex("by_kind_and_state", (q) => q.eq("kind", "refinement"))
             .order("desc")
             .take(limit * 3);
-    const refinements = refinementsRaw
+    // Refinements feed the build-mode Chef panel, whose contract is
+    //   { _id, text, answer?, state: "open" | "answered" | "skipped" }.
+    // The raw `items` rows don't carry the answer (it lives in `devLogs`) and
+    // use the lifecycle state ("requested"/"completed"/"rejected"), so fold the
+    // latest devLog in and normalize `state` here. Without this the panel never
+    // sees a submitted answer: it keeps `state: "requested"`, shows the empty
+    // input on every reload, and the user re-answers into a void.
+    const refinementItems = refinementsRaw
       .filter((item) => includeCompleted || item.state !== "completed")
       .filter((item) => includeCompleted || item.state !== "rejected")
       .slice(0, limit);
+    const refinements = await Promise.all(
+      refinementItems.map(async (item) => {
+        const lastLog = await ctx.db
+          .query("devLogs")
+          .withIndex("by_item", (q) => q.eq("itemId", item._id))
+          .order("desc")
+          .take(1);
+        const answer = lastLog.length ? lastLog[0].message : undefined;
+        const state: "open" | "answered" | "skipped" =
+          item.state === "rejected" ? "skipped" : answer ? "answered" : "open";
+        return { ...item, text: item.title, answer, state };
+      }),
+    );
 
     const queueStates: Array<"requested" | "inProgress"> = [
       "requested",
@@ -98,9 +140,8 @@ export const snapshot = query({
         todos: todos.length,
         openTodos: todos.filter((todo) => todo.status !== "done").length,
         progress: progress.length,
-        openRefinements: refinements.filter(
-          (item) => item.state !== "completed" && item.state !== "rejected",
-        ).length,
+        openRefinements: refinements.filter((item) => item.state === "open")
+          .length,
         requested: requests.filter((item) => item.state === "requested").length,
         inProgress: requests.filter((item) => item.state === "inProgress").length,
       },

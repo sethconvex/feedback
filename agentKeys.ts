@@ -24,7 +24,15 @@ export const list = query({
 });
 
 export const create = mutation({
-  args: { name: v.string(), adminUserId: v.string() },
+  args: {
+    name: v.string(),
+    adminUserId: v.string(),
+    // Defaults to build-only. Pass ["build","triage"] to mint a key that may
+    // also approve/reject — the owner does this deliberately.
+    scopes: v.optional(
+      v.array(v.union(v.literal("build"), v.literal("triage"))),
+    ),
+  },
   returns: v.object({ id: v.id("agentKeys"), key: v.string() }),
   handler: async (ctx, args) => {
     const key = generateKey();
@@ -33,6 +41,7 @@ export const create = mutation({
       key,
       createdBy: args.adminUserId,
       revoked: false,
+      scopes: args.scopes ?? ["build"],
     });
     return { id, key };
   },

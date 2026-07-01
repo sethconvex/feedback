@@ -67,7 +67,10 @@ export type ChefRequest = {
   _id: string;
   title: string;
   description?: string;
-  state: string;
+  // Coarse, user-facing lifecycle. NOT the raw state and NEVER a queue
+  // position — a vote is a signal, not a delivery promise. Owner-only views
+  // (triage) may additionally carry raw fields via `any`.
+  publicStatus: "community" | "planned" | "building" | "shipped";
   voteCount: number;
 };
 export type ChefTodo = {
@@ -82,6 +85,16 @@ export type ChefProgress = {
   kind: "step" | "shipped" | "note";
 };
 
+export type ChefTriageItem = {
+  _id: string;
+  title: string;
+  description?: string;
+  // Owner-only: the raw state, so the console can distinguish "needs a decision"
+  // (submitted) from "approved, not yet built" (requested).
+  state: string;
+  stats?: { totalAmount: number; supporterCount: number };
+};
+
 export type ChefPanelApi = {
   listOpenRefinements: AnyQuery<{ limit?: number }, ChefRefinement[]>;
   answerRefinement: AnyMutation<{ id: string; answer: string }>;
@@ -91,6 +104,14 @@ export type ChefPanelApi = {
   upvoteRequest: AnyMutation<{ id: string }>;
   listProgress: AnyQuery<Record<string, never>, ChefProgress[]>;
   listTodos: AnyQuery<Record<string, never>, ChefTodo[]>;
+  // Role + owner-only control plane. When `myRole` resolves to "owner" the
+  // panel shows the Owner Console (triage + approve/reject). Visitors never
+  // fetch the control-plane data (listTriage is skipped). Required so the
+  // panel's hooks stay unconditional — the host wrapper always exports them
+  // (see proposal Diff 3); for a visitor the host gates them server-side.
+  myRole: AnyQuery<Record<string, never>, "owner" | "visitor">;
+  listTriage: AnyQuery<Record<string, never>, ChefTriageItem[]>;
+  decide: AnyMutation<{ id: string; decision: "approve" | "reject" }>;
 };
 
 export function ChefPanel({ api }: { api: ChefPanelApi }) {
@@ -102,6 +123,11 @@ export function ChefPanel({ api }: { api: ChefPanelApi }) {
   const upvote = useMutation(api.upvoteRequest);
   const progress = useQuery(api.listProgress, {});
   const todos = useQuery(api.listTodos, {});
+  const role = useQuery(api.myRole, {}) ?? "visitor";
+  const isOwner = role === "owner";
+  const decide = useMutation(api.decide);
+  // Only the owner fetches the control-plane feed; visitors skip it.
+  const triage = useQuery(api.listTriage, isOwner ? {} : "skip");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [reqText, setReqText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -118,9 +144,14 @@ export function ChefPanel({ api }: { api: ChefPanelApi }) {
   const todoUndone = (todos ?? []).filter((t) => t.status !== "done").length;
   const todosCount = (todos ?? []).length;
 
-  const defaultTab: "asking" | "request" | "building" =
-    openCount > 0 ? "asking" : "request";
-  const [tab, setTab] = useState<"asking" | "request" | "building">(defaultTab);
+  // Number of items awaiting an owner decision (submitted, not yet approved).
+  const triagePending = (triage ?? []).filter(
+    (t) => t.state === "submitted",
+  ).length;
+
+  type Tab = "asking" | "request" | "building" | "owner";
+  const defaultTab: Tab = openCount > 0 ? "asking" : "request";
+  const [tab, setTab] = useState<Tab>(defaultTab);
 
   useEffect(() => {
     if (openCount > 0 && tab !== "asking") setTab("asking");
@@ -258,6 +289,15 @@ export function ChefPanel({ api }: { api: ChefPanelApi }) {
               badge={null}
               badgeKind="neutral"
             />
+            {isOwner && (
+              <TabButton
+                active={tab === "owner"}
+                onClick={() => setTab("owner")}
+                label="Owner"
+                badge={triagePending > 0 ? String(triagePending) : null}
+                badgeKind="attention"
+              />
+            )}
           </div>
 
           <div
@@ -290,6 +330,9 @@ export function ChefPanel({ api }: { api: ChefPanelApi }) {
                 requests={requests ?? []}
                 upvote={upvote}
               />
+            )}
+            {tab === "owner" && isOwner && (
+              <OwnerTab items={triage ?? []} decide={decide} />
             )}
           </div>
         </>
@@ -763,10 +806,17 @@ function RequestTab({
   requests: ChefRequest[];
   upvote: (args: { id: string }) => Promise<unknown>;
 }) {
+  // Most-wanted first — a signal, not an ordering promise. We render a coarse
+  // bucket label, never "#3 in queue".
+  const board = [...requests].sort((a, b) => b.voteCount - a.voteCount);
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <section style={{ display: "grid", gap: 6 }}>
         <SectionLabel>What should Chef build next?</SectionLabel>
+        <p style={{ fontSize: 12, color: "#9a3412", margin: "0 0 2px" }}>
+          Suggest a feature and vote on others’. The owner decides what gets
+          built — nothing here runs code.
+        </p>
         <form onSubmit={onSubmit} style={{ display: "grid", gap: 8 }}>
           <textarea
             value={reqText}
@@ -807,23 +857,23 @@ function RequestTab({
         <section style={{ display: "grid", gap: 6 }}>
           <SectionLabel>In flight &amp; recent</SectionLabel>
           <div style={{ display: "grid", gap: 6 }}>
-            {requests.map((r) => {
+            {board.map((r) => {
               const stateColor =
-                r.state === "completed"
+                r.publicStatus === "shipped"
                   ? "#15803d"
-                  : r.state === "inProgress"
+                  : r.publicStatus === "building"
                     ? "#ea580c"
-                    : r.state === "rejected"
-                      ? "#9ca3af"
-                      : "#6b7280";
+                    : r.publicStatus === "planned"
+                      ? "#6b7280"
+                      : "#a16207";
               const stateLabel =
-                r.state === "inProgress"
+                r.publicStatus === "building"
                   ? "Building…"
-                  : r.state === "completed"
+                  : r.publicStatus === "shipped"
                     ? "Shipped"
-                    : r.state === "rejected"
-                      ? "Skipped"
-                      : "Queued";
+                    : r.publicStatus === "planned"
+                      ? "Planned"
+                      : "Requested";
               return (
                 <div
                   key={r._id}
@@ -886,6 +936,189 @@ function RequestTab({
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+function OwnerTab({
+  items,
+  decide,
+}: {
+  items: ChefTriageItem[];
+  decide: (args: {
+    id: string;
+    decision: "approve" | "reject";
+  }) => Promise<unknown>;
+}) {
+  // Highest-voted first — the same signal visitors see, but here it's
+  // actionable. submitted = needs a decision; requested = approved, queued.
+  const ranked = [...items].sort(
+    (a, b) => (b.stats?.totalAmount ?? 0) - (a.stats?.totalAmount ?? 0),
+  );
+  const pending = ranked.filter((r) => r.state === "submitted");
+  const approved = ranked.filter((r) => r.state === "requested");
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <p style={{ fontSize: 12, color: "#9a3412", margin: 0 }}>
+        Your control plane. Approving a request is the only thing that lets a
+        build agent work on it.
+      </p>
+
+      <section style={{ display: "grid", gap: 6 }}>
+        <SectionLabel>Needs your decision ({pending.length})</SectionLabel>
+        {pending.length === 0 ? (
+          <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>
+            Nothing waiting. New requests show up here, most-wanted first.
+          </p>
+        ) : (
+          <div style={{ display: "grid", gap: 6 }}>
+            {pending.map((r) => (
+              <TriageRow key={r._id} item={r} decide={decide} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {approved.length > 0 && (
+        <section style={{ display: "grid", gap: 6 }}>
+          <SectionLabel>Approved · queued ({approved.length})</SectionLabel>
+          <div style={{ display: "grid", gap: 6 }}>
+            {approved.map((r) => (
+              <div
+                key={r._id}
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid #f3f4f6",
+                  background: "white",
+                }}
+              >
+                <span
+                  style={{
+                    minWidth: 36,
+                    textAlign: "center",
+                    fontWeight: 700,
+                    fontSize: 12,
+                    color: "#9a3412",
+                  }}
+                >
+                  ▲ {r.stats?.totalAmount ?? 0}
+                </span>
+                <span
+                  style={{
+                    flex: 1,
+                    fontSize: 13,
+                    color: "#1f2937",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {r.title}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function TriageRow({
+  item,
+  decide,
+}: {
+  item: ChefTriageItem;
+  decide: (args: {
+    id: string;
+    decision: "approve" | "reject";
+  }) => Promise<unknown>;
+}) {
+  const [busy, setBusy] = useState(false);
+  async function act(decision: "approve" | "reject") {
+    setBusy(true);
+    try {
+      await decide({ id: item._id, decision });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+        padding: 10,
+        borderRadius: 8,
+        border: "1px solid #fed7aa",
+        background: "white",
+      }}
+    >
+      <span
+        style={{
+          minWidth: 36,
+          textAlign: "center",
+          fontWeight: 700,
+          fontSize: 12,
+          color: "#9a3412",
+        }}
+        title="Votes"
+      >
+        ▲ {item.stats?.totalAmount ?? 0}
+      </span>
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          fontSize: 13,
+          color: "#1f2937",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {item.title}
+      </span>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => act("approve")}
+        style={{
+          padding: "6px 10px",
+          background: busy ? "#fed7aa" : "#ea580c",
+          color: "white",
+          border: 0,
+          borderRadius: 6,
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: busy ? "not-allowed" : "pointer",
+        }}
+      >
+        Approve
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => act("reject")}
+        style={{
+          padding: "6px 10px",
+          background: "white",
+          color: "#9a3412",
+          border: "1px solid #fed7aa",
+          borderRadius: 6,
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: busy ? "not-allowed" : "pointer",
+        }}
+      >
+        Reject
+      </button>
     </div>
   );
 }
