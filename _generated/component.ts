@@ -110,7 +110,12 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       list: FunctionReference<
         "query",
         "internal",
-        { agentKey?: string; itemId: string; viewer?: string | null },
+        {
+          agentKey?: string;
+          includeCommunity?: boolean;
+          itemId: string;
+          viewer?: string | null;
+        },
         Array<{
           _id: string;
           createdAt: number;
@@ -124,7 +129,12 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       listForItems: FunctionReference<
         "query",
         "internal",
-        { agentKey?: string; itemIds: Array<string>; viewer?: string | null },
+        {
+          agentKey?: string;
+          includeCommunity?: boolean;
+          itemIds: Array<string>;
+          viewer?: string | null;
+        },
         Array<{
           attachments: Array<{
             _id: string;
