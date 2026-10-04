@@ -27,7 +27,11 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       create: FunctionReference<
         "mutation",
         "internal",
-        { adminUserId: string; name: string },
+        {
+          adminUserId: string;
+          name: string;
+          scopes?: Array<"build" | "triage">;
+        },
         { id: string; key: string },
         Name
       >;
@@ -59,9 +63,11 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "query",
         "internal",
         {
+          agentKey?: string;
           includeCompleted?: boolean;
           limit?: number;
           mode?: "all" | "chef" | "queue";
+          viewer?: string | null;
         },
         {
           counts: {
@@ -77,6 +83,66 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           requests: Array<any>;
           todos: Array<any>;
         },
+        Name
+      >;
+    };
+    attachments: {
+      add: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          agentKey?: string;
+          itemId: string;
+          kind: "screenshot" | "audio";
+          storageId: string;
+          userId: string;
+        },
+        string,
+        Name
+      >;
+      generateUploadUrl: FunctionReference<
+        "mutation",
+        "internal",
+        {},
+        string,
+        Name
+      >;
+      list: FunctionReference<
+        "query",
+        "internal",
+        { agentKey?: string; itemId: string; viewer?: string | null },
+        Array<{
+          _id: string;
+          createdAt: number;
+          kind: "screenshot" | "audio";
+          mimeType: string;
+          size: number;
+          url: string | null;
+        }>,
+        Name
+      >;
+      listForItems: FunctionReference<
+        "query",
+        "internal",
+        { agentKey?: string; itemIds: Array<string>; viewer?: string | null },
+        Array<{
+          attachments: Array<{
+            _id: string;
+            createdAt: number;
+            kind: "screenshot" | "audio";
+            mimeType: string;
+            size: number;
+            url: string | null;
+          }>;
+          itemId: string;
+        }>,
+        Name
+      >;
+      remove: FunctionReference<
+        "mutation",
+        "internal",
+        { agentKey?: string; attachmentId: string; userId: string },
+        null,
         Name
       >;
     };
@@ -162,7 +228,9 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         {
           autoApprove?: boolean;
           description: string;
+          kind?: "feature" | "refinement";
           title: string;
+          transcript?: string;
           userId: string;
         },
         string,
@@ -178,7 +246,12 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       listAll: FunctionReference<
         "query",
         "internal",
-        { cursor?: string | null; limit?: number },
+        {
+          agentKey?: string;
+          cursor?: string | null;
+          limit?: number;
+          viewer?: string | null;
+        },
         { nextCursor: string | null; page: Array<any> },
         Name
       >;
@@ -186,6 +259,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "query",
         "internal",
         {
+          agentKey?: string;
           cursor?: string | null;
           limit?: number;
           state:
@@ -195,21 +269,43 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             | "inProgress"
             | "rejected"
             | "completed";
+          viewer?: string | null;
         },
         { nextCursor: string | null; page: Array<any> },
+        Name
+      >;
+      listForTriage: FunctionReference<
+        "query",
+        "internal",
+        { agentKey?: string; limit?: number; viewer?: string | null },
+        Array<any>,
         Name
       >;
       listPublic: FunctionReference<
         "query",
         "internal",
-        { cursor?: string | null; limit?: number },
+        { cursor?: string | null; includeCommunity?: boolean; limit?: number },
         { nextCursor: string | null; page: Array<any> },
+        Name
+      >;
+      listRefinementOpen: FunctionReference<
+        "query",
+        "internal",
+        { agentKey?: string; limit?: number; viewer?: string | null },
+        any,
         Name
       >;
       merge: FunctionReference<
         "mutation",
         "internal",
         { sourceId: string; targetId: string },
+        null,
+        Name
+      >;
+      remove: FunctionReference<
+        "mutation",
+        "internal",
+        { itemId: string },
         null,
         Name
       >;
@@ -257,6 +353,80 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "internal",
         { userId: string },
         number,
+        Name
+      >;
+    };
+    progress: {
+      listRecent: FunctionReference<
+        "query",
+        "internal",
+        { limit?: number },
+        any,
+        Name
+      >;
+      post: FunctionReference<
+        "mutation",
+        "internal",
+        { kind: "step" | "shipped" | "note"; message: string },
+        string,
+        Name
+      >;
+    };
+    settings: {
+      get: FunctionReference<
+        "query",
+        "internal",
+        {},
+        { communityBoardVisible: boolean; runMode: "local" | "cloud" },
+        Name
+      >;
+      set: FunctionReference<
+        "mutation",
+        "internal",
+        { communityBoardVisible?: boolean; runMode?: "local" | "cloud" },
+        null,
+        Name
+      >;
+    };
+    todos: {
+      advance: FunctionReference<"mutation", "internal", {}, null, Name>;
+      listAll: FunctionReference<"query", "internal", {}, any, Name>;
+      plan: FunctionReference<
+        "mutation",
+        "internal",
+        { items: Array<string> },
+        null,
+        Name
+      >;
+      setStatus: FunctionReference<
+        "mutation",
+        "internal",
+        { id: string; status: "pending" | "active" | "done" },
+        null,
+        Name
+      >;
+    };
+    users: {
+      count: FunctionReference<"query", "internal", {}, number, Name>;
+      ensure: FunctionReference<
+        "mutation",
+        "internal",
+        { userId: string },
+        { role: "admin" | "member"; userId: string },
+        Name
+      >;
+      get: FunctionReference<
+        "query",
+        "internal",
+        { userId: string },
+        { createdAt: number; role: "admin" | "member"; userId: string } | null,
+        Name
+      >;
+      setRole: FunctionReference<
+        "mutation",
+        "internal",
+        { role: "admin" | "member"; userId: string },
+        null,
         Name
       >;
     };

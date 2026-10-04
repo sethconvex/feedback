@@ -8,17 +8,22 @@
  * @module
  */
 
+import type * as access from "../access.js";
 import type * as agentKeys from "../agentKeys.js";
 import type * as agentState from "../agentState.js";
+import type * as attachments from "../attachments.js";
 import type * as bids from "../bids.js";
 import type * as devLogs from "../devLogs.js";
 import type * as items from "../items.js";
 import type * as notifications from "../notifications.js";
 import type * as progress from "../progress.js";
+import type * as react_src_ChefPanel from "../react/src/ChefPanel.js";
+import type * as react_src_index from "../react/src/index.js";
 import type * as settings from "../settings.js";
 import type * as src_client from "../src/client.js";
 import type * as src_http from "../src/http.js";
 import type * as todos from "../todos.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -28,17 +33,22 @@ import type {
 import { anyApi, componentsGeneric } from "convex/server";
 
 const fullApi: ApiFromModules<{
+  access: typeof access;
   agentKeys: typeof agentKeys;
   agentState: typeof agentState;
+  attachments: typeof attachments;
   bids: typeof bids;
   devLogs: typeof devLogs;
   items: typeof items;
   notifications: typeof notifications;
   progress: typeof progress;
+  "react/src/ChefPanel": typeof react_src_ChefPanel;
+  "react/src/index": typeof react_src_index;
   settings: typeof settings;
   "src/client": typeof src_client;
   "src/http": typeof src_http;
   todos: typeof todos;
+  users: typeof users;
 }> = anyApi as any;
 
 /**
