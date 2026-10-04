@@ -45,7 +45,8 @@
     "_generated",
     "users.ts",
     "access.ts",
-    "settings.ts"
+    "settings.ts",
+    "attachments.ts"
   ],
   "peerDependencies": {
     "convex": "^1.35.1"
