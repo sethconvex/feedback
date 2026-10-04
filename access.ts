@@ -70,10 +70,14 @@ export async function buildStatusVisible(
 export async function isPubliclyVisible(
   ctx: QueryCtx,
   item: Doc<"items">,
+  includeCommunity?: boolean,
 ): Promise<boolean> {
   if (item.mergedInto || item.kind === "refinement") return false;
   if (item.state === "rejected") return false;
   if (item.state === "submitted") {
+    // Hosts that pass includeCommunity to items.listPublic should pass the
+    // same value here so attachments follow the board they actually render.
+    if (includeCommunity !== undefined) return includeCommunity;
     const s = await ctx.db
       .query("settings")
       .withIndex("by_key", (q) => q.eq("key", "singleton"))
@@ -89,9 +93,9 @@ export async function isPubliclyVisible(
 export async function canReadItem(
   ctx: QueryCtx,
   item: Doc<"items">,
-  args: ActorArgs,
+  args: ActorArgs & { includeCommunity?: boolean },
 ): Promise<boolean> {
   if (isPrivileged(await resolveActor(ctx, args))) return true;
   if (args.viewer && args.viewer === item.createdBy) return true;
-  return await isPubliclyVisible(ctx, item);
+  return await isPubliclyVisible(ctx, item, args.includeCommunity);
 }

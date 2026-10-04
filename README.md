@@ -167,7 +167,9 @@ that are never attached stay in component storage (sweep them if that matters).
 
 **Who can read attachments:** the same audience as the item — admins/agents,
 the item's creator (`viewer`), and anyone while the item is on the public board
-(`items.listPublic` rules, honoring `settings.communityBoardVisible`). Screenshots
+(`items.listPublic` rules; pre-triage items count as public per
+`settings.communityBoardVisible`, or per the `includeCommunity` you pass to
+`attachments.list` — pass the same value you give `items.listPublic`). Screenshots
 can contain private data, so consider turning off `communityBoardVisible` for
 apps where pre-triage requests shouldn't be public. The agent HTTP queue
 (`GET /agent/queue`) inlines `attachments: [{ kind, url, mimeType }]` per item.

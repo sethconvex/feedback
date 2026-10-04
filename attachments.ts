@@ -32,6 +32,10 @@ export const vAttachmentKind = v.union(
 const vActorArgs = {
   viewer: v.optional(v.union(v.string(), v.null())),
   agentKey: v.optional(v.string()),
+  // Whether pre-triage ("submitted") items count as public. Defaults to the
+  // owner's settings.communityBoardVisible; pass the same value you give
+  // items.listPublic so attachment visibility matches your board.
+  includeCommunity: v.optional(v.boolean()),
 };
 
 const vAttachmentOut = v.object({

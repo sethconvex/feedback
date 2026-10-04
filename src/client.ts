@@ -180,13 +180,13 @@ export class Feedback {
 
     list: (
       ctx: RunQueryCtx,
-      args: { itemId: GenericId<"items"> | string } & ActorArgs,
+      args: { itemId: GenericId<"items"> | string; includeCommunity?: boolean } & ActorArgs,
     ): Promise<Attachment[]> =>
       ctx.runQuery(this.component.attachments.list, args),
 
     listForItems: (
       ctx: RunQueryCtx,
-      args: { itemIds: Array<GenericId<"items"> | string> } & ActorArgs,
+      args: { itemIds: Array<GenericId<"items"> | string>; includeCommunity?: boolean } & ActorArgs,
     ): Promise<Array<{ itemId: string; attachments: Attachment[] }>> =>
       ctx.runQuery(this.component.attachments.listForItems, args),
 
