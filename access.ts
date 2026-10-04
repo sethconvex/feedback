@@ -1,4 +1,5 @@
 import type { QueryCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 
 // Role/identity resolution for the component's visibility rules. The host
 // forwards a trusted `viewer` (the authenticated userId, or null/omitted for an
@@ -61,4 +62,36 @@ export async function buildStatusVisible(
   if (isPrivileged(await resolveActor(ctx, args))) return true;
   const anyUser = await ctx.db.query("users").take(1);
   return anyUser.length === 0;
+}
+
+// Whether `item` is on the public board (mirrors items.listPublic): not merged,
+// not a refinement, not rejected, and — for pre-triage "submitted" items — only
+// when the owner's communityBoardVisible setting (default true) allows it.
+export async function isPubliclyVisible(
+  ctx: QueryCtx,
+  item: Doc<"items">,
+): Promise<boolean> {
+  if (item.mergedInto || item.kind === "refinement") return false;
+  if (item.state === "rejected") return false;
+  if (item.state === "submitted") {
+    const s = await ctx.db
+      .query("settings")
+      .withIndex("by_key", (q) => q.eq("key", "singleton"))
+      .unique();
+    return s?.communityBoardVisible ?? true;
+  }
+  return true;
+}
+
+// Who may read an item's private-ish extras (attachments): admins/agents, the
+// item's creator, and — while the item is on the public board — anyone who can
+// see the board. Same audience as the item itself.
+export async function canReadItem(
+  ctx: QueryCtx,
+  item: Doc<"items">,
+  args: ActorArgs,
+): Promise<boolean> {
+  if (isPrivileged(await resolveActor(ctx, args))) return true;
+  if (args.viewer && args.viewer === item.createdBy) return true;
+  return await isPubliclyVisible(ctx, item);
 }

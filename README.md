@@ -114,6 +114,64 @@ import { api } from "./convex/_generated/api";
 />
 ```
 
+## Attachments (screenshots + voice notes)
+
+Items can carry up to **4 screenshots** (`image/*`, ≤10 MB each) and **1 voice
+note** (`audio/*` or `video/mp4`, ≤25 MB). Files live in the component's own
+file storage, are deleted by `items.remove`, and move to the target on
+`items.merge`. A voice-note transcript is stored on the item as `transcript`
+(separate from the editable `description`).
+
+```ts
+// convex/wow.ts (host) — auth first, then forward a trusted userId
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireUserId(ctx);
+    return await feedback.attachments.generateUploadUrl(ctx);
+  },
+});
+
+export const submitRequestWithMedia = mutation({
+  args: {
+    title: v.string(),
+    description: v.optional(v.string()),
+    transcript: v.optional(v.string()),
+    screenshotStorageIds: v.array(v.string()),
+    audioStorageId: v.optional(v.string()),
+  },
+  handler: async (ctx, a) => {
+    const userId = await requireUserId(ctx);
+    const itemId = await feedback.items.create(ctx, {
+      userId, title: a.title, description: a.description ?? "", transcript: a.transcript,
+    });
+    for (const storageId of a.screenshotStorageIds)
+      await feedback.attachments.add(ctx, { itemId, kind: "screenshot", storageId, userId });
+    if (a.audioStorageId)
+      await feedback.attachments.add(ctx, { itemId, kind: "audio", storageId: a.audioStorageId, userId });
+    return itemId;
+  },
+});
+
+export const listAttachments = query({
+  args: { itemId: v.string() },
+  handler: async (ctx, a) =>
+    feedback.attachments.list(ctx, { itemId: a.itemId, viewer: await getUserId(ctx) }),
+});
+```
+
+Client upload: `POST` the Blob to the URL with its `Content-Type` header set;
+the response is `{ storageId }`. `add` validates type, size, per-item caps, that
+the upload is under an hour old, and that it isn't already attached. Uploads
+that are never attached stay in component storage (sweep them if that matters).
+
+**Who can read attachments:** the same audience as the item — admins/agents,
+the item's creator (`viewer`), and anyone while the item is on the public board
+(`items.listPublic` rules, honoring `settings.communityBoardVisible`). Screenshots
+can contain private data, so consider turning off `communityBoardVisible` for
+apps where pre-triage requests shouldn't be public. The agent HTTP queue
+(`GET /agent/queue`) inlines `attachments: [{ kind, url, mimeType }]` per item.
+
 ## Trust model
 
 The component never reads `ctx.auth`. Every mutation takes a `userId: string` arg — the host authenticates first, then forwards a trusted ID. Works with any auth provider.

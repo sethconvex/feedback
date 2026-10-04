@@ -58,7 +58,7 @@ export function mountAgentRoutes(
     ctx: any,
     req: Request,
   ): Promise<
-    { agentId: string; keyId: string; scopes: string[] } | Response
+    { agentId: string; keyId: string; key: string; scopes: string[] } | Response
   > {
     const header = req.headers.get("authorization") ?? "";
     const match = header.match(/^Bearer\s+(\S+)$/i);
@@ -72,6 +72,7 @@ export function mountAgentRoutes(
     return {
       agentId: `${AGENT_USER_PREFIX}${record.name || record._id}`,
       keyId: record._id,
+      key: match[1],
       // Default keys are build-only. Triage (approve/reject) requires the owner
       // to have minted a key with the explicit "triage" scope.
       scopes: record.scopes ?? ["build"],
@@ -96,12 +97,32 @@ export function mountAgentRoutes(
     if (mode !== "triage" && mode !== "implement") {
       return json({ error: `Unknown mode: ${mode}` }, 400);
     }
+    // listByState is admin/agent-gated: forward the verified bearer key.
     const result = await ctx.runQuery(component.items.listByState, {
       state,
       limit,
+      agentKey: auth.key,
     });
     // listByState returns { page, nextCursor }; agents want a flat array.
-    const items = result?.page ?? [];
+    const page: any[] = result?.page ?? [];
+    // Inline screenshot / voice-note URLs so the agent can look at them.
+    const withMedia = page.length
+      ? await ctx.runQuery(component.attachments.listForItems, {
+          itemIds: page.map((i) => i._id),
+          agentKey: auth.key,
+        })
+      : [];
+    const byItem = new Map<string, any[]>(
+      withMedia.map((r: any) => [r.itemId, r.attachments]),
+    );
+    const items = page.map((i) => ({
+      ...i,
+      attachments: (byItem.get(i._id) ?? []).map((a: any) => ({
+        kind: a.kind,
+        url: a.url,
+        mimeType: a.mimeType,
+      })),
+    }));
     return json({ mode, items });
   });
 

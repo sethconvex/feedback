@@ -21,6 +21,17 @@ export type ItemState =
   | "rejected"
   | "completed";
 
+export type AttachmentKind = "screenshot" | "audio";
+
+export type Attachment = {
+  _id: string;
+  kind: AttachmentKind;
+  url: string | null;
+  mimeType: string;
+  size: number;
+  createdAt: number;
+};
+
 export type ActorArgs = { viewer?: string | null; agentKey?: string };
 
 /**
@@ -65,8 +76,14 @@ export class Feedback {
         description: string;
         autoApprove?: boolean;
         kind?: "feature" | "refinement";
+        /** Voice-note transcript, stored separately from `description`. */
+        transcript?: string;
       },
     ) => ctx.runMutation(this.component.items.create, args),
+
+    /** Delete an item + its bids, dev logs, notifications and attachments. Host-gate to admins. */
+    remove: (ctx: RunMutationCtx, args: { itemId: GenericId<"items"> }) =>
+      ctx.runMutation(this.component.items.remove, args),
 
     listRefinementOpen: (
       ctx: RunQueryCtx,
@@ -129,6 +146,54 @@ export class Feedback {
         reason?: string;
       },
     ) => ctx.runMutation(this.component.items.boost, args),
+  };
+
+  /**
+   * Screenshots + voice notes on items, stored in the component's file storage.
+   *
+   *   const url = await feedback.attachments.generateUploadUrl(ctx); // mutation
+   *   // client: fetch(url, { method: "POST", body: blob, headers: { "Content-Type": blob.type } })
+   *   await feedback.attachments.add(ctx, { itemId, kind: "screenshot", storageId, userId });
+   *   const files = await feedback.attachments.list(ctx, { itemId, viewer: userId });
+   *
+   * Limits: image/* ≤10 MB (≤4 per item), audio/* or video/mp4 ≤25 MB (1 per
+   * item); uploads must be attached within an hour and only once. `list` is
+   * readable by admins/agents, the item's creator, or anyone while the item is
+   * on the public board — it returns [] otherwise.
+   */
+  attachments = {
+    generateUploadUrl: (ctx: RunMutationCtx): Promise<string> =>
+      ctx.runMutation(this.component.attachments.generateUploadUrl, {}),
+
+    add: (
+      ctx: RunMutationCtx,
+      args: {
+        itemId: GenericId<"items"> | string;
+        kind: AttachmentKind;
+        storageId: string;
+        /** Host-authenticated uploader; must be the item's creator unless admin/agent. */
+        userId: string;
+        agentKey?: string;
+      },
+    ): Promise<string> =>
+      ctx.runMutation(this.component.attachments.add, args),
+
+    list: (
+      ctx: RunQueryCtx,
+      args: { itemId: GenericId<"items"> | string } & ActorArgs,
+    ): Promise<Attachment[]> =>
+      ctx.runQuery(this.component.attachments.list, args),
+
+    listForItems: (
+      ctx: RunQueryCtx,
+      args: { itemIds: Array<GenericId<"items"> | string> } & ActorArgs,
+    ): Promise<Array<{ itemId: string; attachments: Attachment[] }>> =>
+      ctx.runQuery(this.component.attachments.listForItems, args),
+
+    remove: (
+      ctx: RunMutationCtx,
+      args: { attachmentId: string; userId: string; agentKey?: string },
+    ) => ctx.runMutation(this.component.attachments.remove, args),
   };
 
   bids = {

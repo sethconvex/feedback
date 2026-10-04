@@ -45,11 +45,30 @@ export default defineSchema({
     // predate this migration.
     totalAmount: v.optional(v.number()),
     supporterCount: v.optional(v.number()),
+    // Verbatim voice-note transcript, kept apart from the (editable)
+    // description so readers can tell what was typed from what was said.
+    transcript: v.optional(v.string()),
   })
     .index("by_state", ["state"])
     .index("by_createdBy", ["createdBy"])
     .index("by_number", ["number"])
     .index("by_kind_and_state", ["kind", "state"]),
+
+  // Screenshots / voice notes attached to an item. Files live in the
+  // COMPONENT's file storage (hosts upload via attachments.generateUploadUrl),
+  // so they are cleaned up with the item and readable by exactly the actors who
+  // may read the item (see access.ts canReadItem).
+  attachments: defineTable({
+    itemId: v.id("items"),
+    kind: v.union(v.literal("screenshot"), v.literal("audio")),
+    storageId: v.id("_storage"),
+    mimeType: v.string(),
+    size: v.number(),
+    createdAt: v.number(),
+    uploadedBy: v.string(),
+  })
+    .index("by_itemId", ["itemId"])
+    .index("by_storageId", ["storageId"]),
 
   bids: defineTable({
     itemId: v.id("items"),

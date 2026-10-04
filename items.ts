@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { vState } from "./schema";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requirePrivileged, buildStatusVisible } from "./access";
+import { deleteAttachmentsForItem, moveAttachments } from "./attachments";
 
 // Args every "list all active" read accepts so the component can enforce that
 // only admins or agents see the full queue (the host forwards a trusted viewer
@@ -66,6 +67,7 @@ function toPublic(item: Doc<"items">) {
     number: item.number,
     title: item.title,
     description: item.description,
+    transcript: item.transcript,
     publicStatus: publicStatus(item),
     voteCount: item.totalAmount ?? 0,
     supporterCount: item.supporterCount ?? 0,
@@ -110,6 +112,8 @@ export const create = mutation({
     description: v.string(),
     autoApprove: v.optional(v.boolean()),
     kind: v.optional(v.union(v.literal("feature"), v.literal("refinement"))),
+    // Optional voice-note transcript, stored apart from the description.
+    transcript: v.optional(v.string()),
   },
   returns: v.id("items"),
   handler: async (ctx, args) => {
@@ -136,6 +140,9 @@ export const create = mutation({
       state: approved ? "requested" : "submitted",
       createdBy: args.userId,
       kind: args.kind ?? "feature",
+      ...(args.transcript?.trim()
+        ? { transcript: args.transcript.trim().slice(0, 20000) }
+        : {}),
       totalAmount: 0,
       supporterCount: 0,
     });
@@ -385,6 +392,7 @@ export const merge = mutation({
           (target.supporterCount ?? 0) + targetSupporterDelta,
       });
     }
+    await moveAttachments(ctx, args.sourceId, args.targetId);
     await ctx.db.patch(args.sourceId, {
       mergedInto: args.targetId,
       totalAmount: 0,
@@ -397,6 +405,36 @@ export const merge = mutation({
       "merged",
       `"${source.title}" was merged into "${target.title}".`,
     );
+    return null;
+  },
+});
+
+/**
+ * Permanently delete an item and everything hanging off it (bids, dev logs,
+ * notifications, attachments + their files). Host-gated like transitionState —
+ * wrap it behind your own admin check. Items merged INTO this one keep their
+ * `mergedInto` pointer (they are already hidden everywhere).
+ */
+export const remove = mutation({
+  args: { itemId: v.id("items") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.itemId);
+    if (!item) return null;
+    for (const table of ["bids", "devLogs"] as const) {
+      const rows = await ctx.db
+        .query(table)
+        .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
+        .collect();
+      for (const r of rows) await ctx.db.delete(r._id);
+    }
+    const notes = await ctx.db
+      .query("notifications")
+      .filter((q) => q.eq(q.field("itemId"), args.itemId))
+      .collect();
+    for (const n of notes) await ctx.db.delete(n._id);
+    await deleteAttachmentsForItem(ctx, args.itemId);
+    await ctx.db.delete(args.itemId);
     return null;
   },
 });
