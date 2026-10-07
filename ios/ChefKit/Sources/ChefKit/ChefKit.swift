@@ -63,6 +63,7 @@ public enum ChefKit {
         ChefRequirements.check()
         ChefOverlay.installWhenReady()
         m.outbox.kick()
+        m.checkWhatsNewOnce()
     }
 
     /// Removes the floating button and its window. The outbox is kept on disk.
@@ -102,7 +103,24 @@ public enum ChefKit {
 
     /// Opens the Chef sheet (requests, Chef's questions, approvals).
     public static func present() {
-        ChefModel.shared.showSheet = true
+        let m = ChefModel.shared
+        guard m.whatsNew != nil else { m.showSheet = true; return }
+        m.whatsNew = nil // one sheet at a time
+        Task { try? await Task.sleep(for: .milliseconds(450)); m.showSheet = true }
+    }
+
+    /// Pop up "What's new" on launch: the changelogs the app's admin recorded for features that
+    /// shipped since this device last looked (`<prefix>:whatsNew`). The very first launch only
+    /// remembers "now". Default true; set it before `install` to turn the automatic sheet off.
+    public static var showsWhatsNew: Bool {
+        get { ChefModel.shared.showsWhatsNew }
+        set { ChefModel.shared.showsWhatsNew = newValue }
+    }
+
+    /// Shows the "What's new" sheet now with everything shipped in the last 30 days (or "You're all
+    /// caught up"), e.g. from a "What's new" row in your settings.
+    public static func presentWhatsNew() {
+        ChefModel.shared.presentWhatsNew()
     }
 
     /// Screenshot the screen now and open the composer, recording (same as long-pressing the button).

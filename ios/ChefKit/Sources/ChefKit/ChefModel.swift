@@ -51,6 +51,12 @@ final class ChefModel {
     private(set) var toast: ChefToast?
     let outbox = ChefOutbox()
 
+    /// The "What's new" sheet (up while non-nil). See ChefWhatsNew.swift.
+    var whatsNew: ChefWhatsNewState?
+    var showsWhatsNew = true
+    @ObservationIgnored var whatsNewChecked = false
+    @ObservationIgnored var whatsNewSub: AnyCancellable?
+
     private init() {}
 
     /// The full function name for this host ("chef:mine").
@@ -104,6 +110,7 @@ final class ChefModel {
     func longPress() {
         guard draft == nil, capturing == nil else { return }
         showSheet = false
+        whatsNew = nil
         let img = ChefSnapshot.capture()
         ChefHaptics.thunk()
         let d = ChefDraft(shots: img.map { [$0] } ?? [], context: ChefKit.context())

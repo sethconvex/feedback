@@ -37,6 +37,27 @@ import Testing
         #expect(ChefDraft.firstSentence(String(repeating: "a", count: 100)).count == 78)
     }
 
+    @Test func whatsNewFirstLaunchRecordsNowThenReturnsIt() throws {
+        let suite = "ChefKitTests.whatsNew.\(UUID().uuidString)"
+        let d = try #require(UserDefaults(suiteName: suite))
+        defer { d.removePersistentDomain(forName: suite) }
+        #expect(ChefWhatsNewStore.seen(prefix: "chef", defaults: d) == nil)
+        #expect(ChefWhatsNewStore.sinceForLaunch(prefix: "chef", now: 1000, defaults: d) == nil)
+        #expect(d.double(forKey: "ChefKit.whatsNewSeen.chef") == 1000)
+        #expect(ChefWhatsNewStore.sinceForLaunch(prefix: "chef", now: 5000, defaults: d) == 1000)
+        ChefWhatsNewStore.markSeen(prefix: "chef", at: 4000, defaults: d)
+        ChefWhatsNewStore.markSeen(prefix: "chef", at: 2000, defaults: d) // never backwards
+        #expect(ChefWhatsNewStore.seen(prefix: "chef", defaults: d) == 4000)
+        #expect(ChefWhatsNewStore.seen(prefix: "other", defaults: d) == nil)
+    }
+
+    @Test func whatsNewEntryDecodes() throws {
+        let json = #"[{"id":"k1","text":"Dark mode is here.","at":1700000000000}]"#
+        let rows = try JSONDecoder().decode([ChefWhatsNewEntry].self, from: Data(json.utf8))
+        #expect(rows.first?.text == "Dark mode is here.")
+        #expect(rows.first?.at == 1_700_000_000_000)
+    }
+
     @Test func speechRestartDetection() {
         #expect(ChefRecorder.speechRestarted(old: "make the button bigger please", new: "also blue"))
         #expect(!ChefRecorder.speechRestarted(old: "make the button bigger", new: "make the button"))

@@ -39,7 +39,7 @@ import { getAuthUserId } from "@convex-dev/auth/server"; // 2.0 alpha: "@convex-
 export const {
   agentState, listPublicItems, submitRequest, upvoteRequest, answerRefinement, skipRefinement,
   generateUploadUrl, submitRequestWithMedia, listAttachments,
-  mine, amAdmin, awaitingApproval, review,
+  mine, amAdmin, awaitingApproval, review, whatsNew,
 } = exposeChefApi(components.feedback, {
   getUserId: getAuthUserId, // who is calling (null = signed out)
 });
@@ -117,7 +117,7 @@ import { Feedback } from "@convex-dev/feedback";
 
 const feedback = new Feedback(components.feedback);
 
-export const { /* …same 13 names… */ } = exposeChefApi(components.feedback, {
+export const { /* …same 14 names… */ } = exposeChefApi(components.feedback, {
   getUserId: getAuthUserId,
   onSubmitted: async (ctx, { itemId, title, description, state }) => {
     if (state !== "submitted") return; // an admin's own request: already queued
@@ -143,6 +143,50 @@ not-yet-approved requests on the public list; default off), `autoRegister` (defa
   (`agentState`), and answer/skip Chef's questions (before anyone has registered, the build
   status is open so the scaffolding agent can work).
 - `mine` returns the caller's own requests (≤50, newest first) with media counts.
+- `whatsNew({ since })` is public (signed-out callers too): it returns only the admin-written
+  changelog line and ship time of completed requests — see "What's new" below.
+
+### What's new (changelogs)
+
+When something ships, record one short, user-facing line for it. Users then get a small
+**"What's new"** pop-up the next time they open the app, listing everything that shipped since
+their last visit.
+
+```ts
+// convex/ship.ts — from your build agent / CLI:
+//   npx convex run ship:complete '{"itemId":"<id>","changelog":"You can now export your book as a PDF."}'
+import { internalMutation } from "./_generated/server";
+import { v } from "convex/values";
+import { Feedback } from "@convex-dev/feedback";
+import { components } from "./_generated/api";
+
+const feedback = new Feedback(components.feedback);
+
+export const complete = internalMutation({
+  args: { itemId: v.string(), changelog: v.string() },
+  handler: async (ctx, { itemId, changelog }) =>
+    // Sets the changelog and moves the item to "completed" (supporters are notified as usual).
+    feedback.items.complete(ctx, { itemId, changelog }),
+});
+```
+
+- Write the changelog for users ("Dark mode is here."), not the request text — requests can be
+  crude or private, and only the changelog is ever shown. ≤280 characters; items completed
+  without one never appear. Fix or add one later with
+  `feedback.items.setChangelog(ctx, { itemId, text })` (empty text clears it).
+- Read it yourself with `feedback.items.listShippedSince(ctx, { since, limit })` →
+  `[{ _id, changelog, completedAt }]`, or call the public `whatsNew({ since })` →
+  `[{ id, text, at }]` from any client.
+- **Web** (`<chef-panel>` / `ChefPanelMount`): once per page load the panel compares against
+  `localStorage["chef-whatsnew-seen:<prefix>"]`. A first visit only records the time (no backlog
+  dump); afterwards, new changelogs appear in a card above the launcher (up to 6, with "and N
+  more", relative dates, **Got it** / × / Escape). Members see it unbranded; admins see the Chef
+  logo. Turn it off with `whats-new="off"` (`<ChefPanelMount whatsNew={false} />`).
+- **iOS** (ChefKit): same rule, keyed by `UserDefaults` `"ChefKit.whatsNewSeen.<prefix>"`; the
+  sheet floats above the app. Turn it off with `ChefKit.showsWhatsNew = false` (before `install`);
+  `ChefKit.presentWhatsNew()` shows the last 30 days on demand (e.g. a "What's new" row in
+  Settings).
+- Older backends without `whatsNew` are detected and skipped silently by both clients.
 
 ## Packages
 

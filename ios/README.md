@@ -29,7 +29,7 @@ Your Convex app installs `@convex-dev/feedback` and exports the Chef API from on
 so the prefix is just the file name you exported from.
 
 Functions used: `generateUploadUrl`, `submitRequestWithMedia`, `mine`, `agentState`, `answerRefinement`,
-`skipRefinement`, `amAdmin`, `awaitingApproval`, `review`.
+`skipRefinement`, `amAdmin`, `awaitingApproval`, `review`, `whatsNew` (optional: skipped if missing).
 
 ## Install
 
@@ -73,6 +73,8 @@ ChefKit.buttonInsets = EdgeInsets(top: 0, leading: 20, bottom: 90, trailing: 20)
 ChefKit.present()                             // open the Chef sheet from your own UI
 ChefKit.report()                              // same as long-pressing the button
 ChefKit.pendingCount                          // requests saved but not yet sent
+ChefKit.showsWhatsNew = false                 // no "What's new" sheet on launch (set before install)
+ChefKit.presentWhatsNew()                     // show the last 30 days of changelogs (e.g. a Settings row)
 ChefKit.uninstall()
 ```
 
@@ -111,6 +113,15 @@ queue). When `chef:amAdmin` is true, the button becomes the Chef hat and the Che
 it and when, details, screenshots, a *Play voice note* button, and **Approve** (→ build queue) / **Reject**.
 Admins also see *Building now* and *Lately* (the build agent's todos and progress). Make someone an admin with the
 component's users/roles API (see the root README).
+
+## What's new
+
+On launch ChefKit asks `chef:whatsNew` for the changelogs your admin/agent recorded
+(`feedback.items.complete(ctx, { itemId, changelog })`, see the root README) since this device last looked, and
+if there are any, shows a **What's new** sheet above your app (dates like "2 days ago", **Got it**). The first
+launch only records the time, so new users aren't shown the whole history. The "last seen" time lives in
+`UserDefaults` under `ChefKit.whatsNewSeen.<prefix>` and is updated when the sheet is dismissed. It never
+interrupts a request being composed. Backends without `whatsNew` are skipped silently.
 
 ## Accessibility
 

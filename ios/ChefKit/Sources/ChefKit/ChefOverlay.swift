@@ -114,12 +114,15 @@ struct ChefOverlayRoot: View {
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: model.capturing != nil)
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: model.toast)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: model.isHidden)
-        .onChange(of: model.showSheet || model.draft != nil) { _, open in ChefOverlay.setActive(open) }
+        .onChange(of: model.showSheet || model.draft != nil || model.whatsNew != nil) { _, open in ChefOverlay.setActive(open) }
         .sheet(isPresented: Binding(get: { model.showSheet }, set: { model.showSheet = $0 })) {
             ChefSheet()
         }
         .sheet(item: Binding(get: { model.draft }, set: { model.draft = $0 })) { d in
             ChefComposer(draft: d)
+        }
+        .sheet(item: Binding(get: { model.whatsNew }, set: { model.whatsNew = $0 })) { s in
+            ChefWhatsNewSheet(state: s)
         }
     }
 }
@@ -170,13 +173,13 @@ struct ChefButton: View {
             }
         }
         .contentShape(Capsule())
-        .onTapGesture { model.showSheet = true; ChefHaptics.tap() }
+        .onTapGesture { ChefKit.present(); ChefHaptics.tap() }
         .onLongPressGesture(minimumDuration: 0.45) { model.longPress() }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(pending > 0 ? "\(name), \(pending) waiting to send" : name)
         .accessibilityHint("Tap to see your requests. Long-press to suggest something about this screen, with a screenshot.")
         .accessibilityAddTraits(.isButton)
-        .accessibilityAction { model.showSheet = true }
+        .accessibilityAction { ChefKit.present() }
         .accessibilityAction(named: "Report this screen") { model.longPress() }
     }
 }
