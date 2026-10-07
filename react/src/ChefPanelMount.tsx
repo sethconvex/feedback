@@ -10,6 +10,11 @@
  *
  *   <ChefPanelMount convexUrl={process.env.NEXT_PUBLIC_CONVEX_URL!} token={useAuthToken()} />
  *
+ * Admins (the component's `amAdmin`) see Chef — branding, build status,
+ * Chef's questions and the approvals queue. Everyone else sees a neutral
+ * lightbulb "Suggest a feature" button (`memberLabel` to rename it) that only
+ * files requests and lists their own.
+ *
  * The panel talks to the functions `exposeChefApi` creates in `convex/<prefix>.ts`
  * (default "chef"). It runs its own Convex client; this component loads the
  * script once, appends one `<chef-panel>` to `document.body`, and keeps its auth
@@ -38,6 +43,8 @@ export type ChefPanelMountProps = {
   src?: string;
   /** Start expanded. */
   defaultOpen?: boolean;
+  /** Launcher text for non-admins (default "Suggest a feature"). */
+  memberLabel?: string;
 };
 
 let loaded: Promise<unknown> | null = null;
@@ -59,7 +66,7 @@ function loadPanel(src?: string): Promise<unknown> {
   return loaded;
 }
 
-export function ChefPanelMount({ convexUrl, prefix = "chef", token, getToken, src, defaultOpen }: ChefPanelMountProps) {
+export function ChefPanelMount({ convexUrl, prefix = "chef", token, getToken, src, defaultOpen, memberLabel }: ChefPanelMountProps) {
   // Read through refs so the panel's fetcher always sees the latest auth.
   const auth = useRef({ token, getToken });
   auth.current = { token, getToken };
@@ -79,6 +86,13 @@ export function ChefPanelMount({ convexUrl, prefix = "chef", token, getToken, sr
       document.body.appendChild(el);
     }
   }, [convexUrl, prefix, src, defaultOpen]);
+
+  useEffect(() => {
+    const el = document.querySelector<ChefPanelElement>(`chef-panel[prefix="${prefix}"]`);
+    if (!el) return;
+    if (memberLabel) el.setAttribute("member-label", memberLabel);
+    else el.removeAttribute("member-label");
+  }, [convexUrl, prefix, memberLabel]);
 
   // Hand the panel our auth; re-hand it whenever the token changes so the
   // panel's client re-authenticates (sign-in, sign-out, refresh).

@@ -6,9 +6,11 @@ Drop a feature-request workflow into any Convex app with one line in your `conve
 
 ## Install in 3 steps
 
-Adds the **Chef** bubble to your app: anyone signed in can send a request (typed, or a
-screenshot + voice note with a live transcript), vote, and see what they asked for; admins
-approve requests, see build status, and answer Chef's questions.
+Adds a feedback button to your app. Your users see a neutral lightbulb **"Suggest a feature"**
+button: they send a request (typed, or a screenshot + voice note with a live transcript) and
+follow their own requests ("Waiting for approval" → "Planned" → "In progress" → "Done"). Admins
+see **Chef** instead: the Chef brand, build status, Chef's questions, the approvals queue, and
+every request.
 
 **1. Install the component.**
 
@@ -32,7 +34,7 @@ export default app;
 // convex/chef.ts
 import { exposeChefApi } from "@convex-dev/feedback";
 import { components } from "./_generated/api";
-import { getAuthUserId } from "@convex-dev/auth/server"; // or any (ctx) => Promise<string | null>
+import { getAuthUserId } from "@convex-dev/auth/server"; // 2.0 alpha: "@convex-dev/auth/core"
 
 export const {
   agentState, listPublicItems, submitRequest, upvoteRequest, answerRefinement, skipRefinement,
@@ -55,8 +57,8 @@ import { useAuthToken } from "@convex-dev/auth/react";
 <ChefPanelMount convexUrl={process.env.NEXT_PUBLIC_CONVEX_URL!} token={useAuthToken()} />
 ```
 
-(Clerk: `getToken={() => getToken({ template: "convex" })}` instead of `token`.) Any other
-page — the panel is a plain web component with no build step:
+(Clerk: `getToken={() => getToken({ template: "convex" })}` instead of `token`. Rename the
+members' button with `memberLabel="Feedback"`.) Any other page — the panel is a plain web component with no build step:
 
 ```html
 <script type="module" src="https://cdn.jsdelivr.net/gh/sethconvex/feedback@main/panel/chef-panel.browser.js"></script>
@@ -67,8 +69,19 @@ page — the panel is a plain web component with no build step:
 </script>
 ```
 
-`prefix` is the module you exported the API from (`convex/chef.ts` → `"chef"`, the default). With a
-bundler you can also `import "@convex-dev/feedback/panel"` to register `<chef-panel>`.
+`prefix` is the module you exported the API from (`convex/chef.ts` → `"chef"`, the default);
+`member-label="Feedback"` renames the members' button. With a bundler you can also
+`import "@convex-dev/feedback/panel"` to register `<chef-panel>`.
+
+**Who sees what** (decided by the server's `amAdmin`, live):
+
+| | Members & signed-out visitors | Admins |
+|---|---|---|
+| Launcher | lightbulb + "Suggest a feature" (no Chef branding) | Chef bubble |
+| Panel | "Request a feature" + "Your requests" | Chef: approvals, Chef's questions, build status, all requests |
+| States shown | Waiting for approval · Planned · In progress · Done · Declined | raw lifecycle |
+
+Signed-out visitors still see the button; sending asks them to sign in.
 
 **iOS:** the same `convex/chef.ts` powers ChefKit, the Swift package — see `ios/` (coming in the
 same PR series).

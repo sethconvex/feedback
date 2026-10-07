@@ -58,7 +58,7 @@ export type ChefSubmission = {
 export type ChefApiOptions = {
   /**
    * Who is calling: the host's authenticated user id, or null when signed out.
-   * `getAuthUserId` from `@convex-dev/auth/server` fits as-is; any
+   * `getAuthUserId` from `@convex-dev/auth/server` (2.0 alpha: `/core`) fits as-is; any
    * `(ctx) => Promise<string | null>` works (e.g. `ctx.auth.getUserIdentity()`'s subject).
    */
   getUserId: (ctx: AnyCtx) => Promise<string | null | undefined>;

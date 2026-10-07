@@ -8,7 +8,14 @@
 // It calls the functions `exposeChefApi` creates (see src/chef.ts), under the
 // module named by `prefix` (default "chef" → convex/chef.ts). Tap the bubble to
 // open the panel; LONG-PRESS (or right-click) it to snapshot the page and send a
-// screenshot + voice-note request. Admins also see "Waiting for your approval".
+// screenshot + voice-note request.
+//
+// Two faces, chosen by the server's `amAdmin`:
+//   - admins see Chef: the Chef brand, build status, Chef's questions, the
+//     "Waiting for your approval" queue, and every request;
+//   - everyone else (members, signed-out visitors) sees a neutral lightbulb
+//     "Suggest a feature" button (override with `member-label="Feedback"`), and
+//     only "Request a feature" plus their own requests. No Chef branding.
 //
 // Auth: hand the panel a token fetcher with `panel.setAuth(fetchToken)` — same
 // signature as ConvexClient.setAuth: ({ forceRefreshToken }) => Promise<string|null>.
@@ -37,6 +44,9 @@ function loadConvex() {
 // Official Chef brand mark (toque + "Chef" wordmark).
 const BRAND_SRC = "https://chef.convex.dev/chef.svg";
 const BRAND = `<img class="brand" src="${BRAND_SRC}" alt="Chef" />`;
+// Neutral mark for everyone who isn't an admin.
+const BULB = `<svg class="bulb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/></svg>`;
+const DEFAULT_MEMBER_LABEL = "Suggest a feature";
 
 // Screenshot lib: loaded lazily (first capture) from a CDN, pinned.
 const SHOT_LIB = "https://cdn.jsdelivr.net/npm/modern-screenshot@4.7.0/+esm";
@@ -46,12 +56,22 @@ const MAX_SHOT_BYTES = 10 * 1024 * 1024;
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const MAX_REC_MS = 5 * 60 * 1000;
 
+// Admin view (raw build lifecycle).
 const STATE_LABEL = {
   submitted: ["Waiting for approval", "#b45309"],
   requested: ["Queued", "#6b7280"],
   planned: ["Queued", "#6b7280"],
   inProgress: ["Building…", "#ea580c"],
   completed: ["Shipped", "#15803d"],
+  rejected: ["Declined", "#9ca3af"],
+};
+// Member view: friendly states for "Your requests".
+const MEMBER_STATE_LABEL = {
+  submitted: ["Waiting for approval", "#b45309"],
+  requested: ["Planned", "#2563eb"],
+  planned: ["Planned", "#2563eb"],
+  inProgress: ["In progress", "#ea580c"],
+  completed: ["Done", "#15803d"],
   rejected: ["Declined", "#9ca3af"],
 };
 
@@ -215,6 +235,20 @@ const CSS_EXTRA = `
   .mine { display: flex; gap: 8px; align-items: baseline; font-size: 12px; padding: 4px 0; }
   .mine .mt { flex: 1; min-width: 0; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mine .ms { flex-shrink: 0; font-size: 11px; font-weight: 600; }
+  /* neutral (non-admin) look */
+  .fab.member { background: #fff; border: 1px solid #e5e7eb; box-shadow: 0 8px 24px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.08); }
+  .fab.member:hover { box-shadow: 0 12px 30px rgba(0,0,0,.18), 0 3px 8px rgba(0,0,0,.10); }
+  .fab .bulb { width: 20px; height: 20px; color: #ea580c; flex-shrink: 0; }
+  .fab .lab { font: 600 14px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1f2937; white-space: nowrap; }
+  .hdr.member { background: #fff; border-bottom: 1px solid #f3f4f6; }
+  .hdr .bulb { width: 26px; height: 26px; color: #ea580c; flex-shrink: 0; }
+  .hdr.member .ttl b { color: #1f2937; }
+  .hdr.member .ttl > span { color: #6b7280; }
+  .hdr.member .min { background: #f3f4f6; color: #374151; }
+  .toast { position: fixed; right: 24px; bottom: 88px; z-index: 2147483003; padding: 9px 14px; border-radius: 10px;
+    background: #111827; color: #fff; font: 600 13px/1.3 ui-sans-serif, system-ui, -apple-system, sans-serif;
+    box-shadow: 0 8px 24px rgba(0,0,0,.2); animation: chef-in 160ms ease-out; }
+  @keyframes chef-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   .flash { font-size: 12px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 7px 9px; }
 `;
 
@@ -243,6 +277,8 @@ export class ChefPanelElement extends Base {
     this.mediaOk = null;
     this.flash = "";
     this.draftKey = `chef-panel:draft:${this.fnPrefix}`;
+    this.admin = false; // from the server's amAdmin; non-admins never see Chef chrome
+    this.memberLabel = this.getAttribute("member-label") || this.getAttribute("label") || DEFAULT_MEMBER_LABEL;
 
     const root = this.attachShadow({ mode: "open" });
     root.innerHTML = `<style>${CSS}${CSS_EXTRA}</style><div class="wrap"></div>`;
@@ -272,6 +308,7 @@ export class ChefPanelElement extends Base {
     });
     watch("mine", {}, (r) => { this.mineList = r || []; this.render(); });
     watch("awaitingApproval", {}, (r) => { this.pending = r || []; this.render(); });
+    watch("amAdmin", {}, (r) => { this.admin = r === true; this.render(); });
     // Feature-detect the media functions with a harmless query.
     this.client.query(this.ref("listAttachments"), { itemIds: [] })
       .then(() => { this.mediaOk = true; this.watchAttachments(); this.render(); })
@@ -320,17 +357,37 @@ export class ChefPanelElement extends Base {
     this._attUnsub = typeof unsub === "function" ? unsub : unsub && unsub.unsubscribe ? () => unsub.unsubscribe() : null;
   }
 
+  static get observedAttributes() { return ["member-label", "label"]; }
+  attributeChangedCallback() {
+    this.memberLabel = this.getAttribute("member-label") || this.getAttribute("label") || DEFAULT_MEMBER_LABEL;
+    if (this.$wrap) this.render();
+  }
+
+  /** The brand mark: Chef for admins, a neutral lightbulb for everyone else. */
+  mark() { return this.admin ? BRAND : BULB; }
+  sentMessage() { return this.admin ? "Sent to Chef" : "Your request was sent"; }
+
+  showToast(msg) {
+    if (!this.shadowRoot) return;
+    if (this.$toast) this.$toast.remove();
+    const el = document.createElement("div");
+    el.className = "toast"; el.setAttribute("role", "status"); el.textContent = msg;
+    this.shadowRoot.appendChild(el); this.$toast = el;
+    setTimeout(() => { el.remove(); if (this.$toast === el) this.$toast = null; }, 3000);
+  }
+
   // Mutations surface their errors inline ("Sign in to …", "Item is under review", …).
   call(name, args) {
-    if (!this.client) return Promise.reject(new Error("Chef isn't connected yet"));
+    if (!this.client) return Promise.reject(new Error("Not connected yet"));
     return this.client.mutation(this.ref(name), args).catch((e) => {
-      this.flash = isUnauth(e) ? "Sign in to send requests to Chef." : errMsg(e);
+      this.flash = isUnauth(e) ? "Sign in to send a request." : errMsg(e);
       this.render();
       throw e;
     });
   }
 
   openQuestions() {
+    if (!this.admin) return [];
     // Exclude server-resolved states AND optimistically-answered ones, so the
     // header count, bubble dot, and asking section drop the moment the user
     // answers — not only once the agent flips the server state.
@@ -344,9 +401,11 @@ export class ChefPanelElement extends Base {
     );
   }
   openApprovals() {
+    if (!this.admin) return [];
     return (this.pending || []).filter((p) => !this.reviewed[p.id]);
   }
   isBuilding() {
+    if (!this.admin) return false;
     const t = this.snap.todos || [];
     return t.some((x) => x.status === "active") || (t.length > 0 && t.some((x) => x.status !== "done"));
   }
@@ -370,11 +429,12 @@ export class ChefPanelElement extends Base {
     const building = this.isBuilding();
     const badge = this.openQuestions().length + this.openApprovals().length;
     this.$wrap.innerHTML = `
-      <button class="fab ${building ? "building" : ""}" id="fab" aria-label="Open Chef panel" title="Chef">
-        ${BRAND}
+      <button class="fab ${building ? "building" : ""} ${this.admin ? "" : "member"}" id="fab"
+        aria-label="${esc(this.admin ? "Open Chef panel" : this.memberLabel)}" title="${esc(this.admin ? "Chef" : this.memberLabel)}">
+        ${this.admin ? BRAND : `${BULB}<span class="lab">${esc(this.memberLabel)}</span>`}
         ${building ? `<span class="spin"></span>` : ""}
         ${badge > 0 ? `<span class="dot">${badge}</span>` : ""}
-        ${this.mediaOk ? `<span class="mic" id="fabmic" title="Tell Chef what to change: screenshot + voice note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg></span>` : ""}
+        ${this.mediaOk ? `<span class="mic" id="fabmic" title="Screenshot + voice note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg></span>` : ""}
       </button>`;
     const fab = this.$wrap.querySelector("#fab");
     let timer = null, fired = false, x0 = 0, y0 = 0;
@@ -399,16 +459,19 @@ export class ChefPanelElement extends Base {
       if (e.target.closest && e.target.closest("#fabmic")) { e.preventDefault(); this.startMediaRequest(); return; }
       this.open = true; this.render();
     };
-    if (this.mediaOk) fab.title = "Chef — long-press (or right-click) to send a screenshot + voice note";
+    if (this.mediaOk) fab.title = `${this.admin ? "Chef" : this.memberLabel} — long-press (or right-click) to send a screenshot + voice note`;
   }
 
   renderPanel() {
     const building = this.isBuilding();
     const open = this.openQuestions();
     const approvals = this.openApprovals();
-    const title = open.length > 0 ? `Chef is asking (${open.length})`
+    const admin = this.admin;
+    const title = !admin ? "Request a feature"
+      : open.length > 0 ? `Chef is asking (${open.length})`
       : approvals.length > 0 ? `${approvals.length} waiting for approval` : "Building with Chef by Convex";
-    const subtitle = building ? "Working on your app…" : "Ask, answer, or request a feature.";
+    const subtitle = !admin ? "Tell us what would make this better."
+      : building ? "Working on your app…" : "Ask, answer, or request a feature.";
 
     // Keep what's been typed (and the caret) across re-renders.
     const prev = {};
@@ -420,8 +483,8 @@ export class ChefPanelElement extends Base {
 
     this.$wrap.innerHTML = `
       <div class="bubble">
-        <div class="hdr ${building ? "building" : ""}">
-          ${BRAND}
+        <div class="hdr ${building ? "building" : ""} ${admin ? "" : "member"}">
+          ${this.mark()}
           <div class="ttl"><b>${esc(title)}</b><span>${building ? `<span class="spin"></span>` : ""}${esc(subtitle)}</span></div>
           <button class="min" id="min" aria-label="Minimize" title="Minimize">▾</button>
         </div>
@@ -432,10 +495,12 @@ export class ChefPanelElement extends Base {
 
     const sections = [];
     if (this.flash) sections.push(`<div class="flash">${esc(this.flash)}</div>`);
-    if (approvals.length) sections.push(this.sectionApprovals(approvals));
-    if (open.length || Object.keys(this.answered).length) sections.push(this.sectionAsking(open));
-    sections.push(this.sectionBuild(building));
-    sections.push(this.sectionRequest());
+    if (admin) {
+      if (approvals.length) sections.push(this.sectionApprovals(approvals));
+      if (open.length || Object.keys(this.answered).length) sections.push(this.sectionAsking(open));
+      sections.push(this.sectionBuild(building));
+    }
+    sections.push(admin ? this.sectionRequest() : this.sectionMemberRequest());
     this.$body.innerHTML = sections.join(`<div class="divider"></div>`);
     this.wireApprovals();
     this.wireAsking(open);
@@ -550,6 +615,23 @@ export class ChefPanelElement extends Base {
     </section>`;
   }
 
+  // Non-admins: just "request a feature" and their own requests, in friendly words.
+  sectionMemberRequest() {
+    const mine = (this.mineList || []).slice(0, 10);
+    const mineHtml = mine.map((m) => {
+      const [label, color] = MEMBER_STATE_LABEL[m.state] || ["Planned", "#2563eb"];
+      const media = [m.screenshotCount ? `📸${m.screenshotCount > 1 ? "×" + m.screenshotCount : ""}` : "", m.hasAudio ? "🎙" : ""].join("");
+      return `<div class="mine"><span class="mt">${esc(m.title)}</span>${media ? `<span>${media}</span>` : ""}<span class="ms" style="color:${color}">${esc(label)}</span></div>`;
+    }).join("");
+    return `<section>
+      <div class="lbl">What would you like?</div>
+      <textarea id="rt" placeholder="e.g., let me export to PDF" rows="2"></textarea>
+      <div class="row-btns"><button class="act" id="sub">Send</button>${this.mediaOk
+        ? `<button class="ghost" id="media" title="Screenshot this page and describe it out loud (or long-press the button)">📸 + 🎙</button>` : ""}</div>
+      ${mine.length ? `<div class="lbl" style="margin-top:12px">Your requests</div>${mineHtml}` : ""}
+    </section>`;
+  }
+
   // ---- wiring ----
   // ⌘/Ctrl+Enter on a textarea triggers its primary submit.
   onCmdEnter(ta, fn) {
@@ -598,6 +680,7 @@ export class ChefPanelElement extends Base {
         const el = this.$body && this.$body.querySelector("#rt");
         if (el && el.value.trim() === text) el.value = "";
         this.render();
+        this.showToast(this.sentMessage());
       }).catch(() => {});
     };
     const sub = this.$body.querySelector("#sub");
@@ -771,7 +854,7 @@ export class ChefPanelElement extends Base {
         ? `<div class="rec"><span class="rdot off"></span><audio controls src="${c.audio.url}"></audio><button id="rerec" title="Record again">↺</button><button id="rmaudio" title="Remove voice note">✕</button></div>`
         : `<div class="rec"><span class="rdot off"></span><span class="tm" style="flex:1">No voice note</span><button id="record">🎙 Record</button></div>`;
     this.$comp.innerHTML = `
-      <div class="hdr">${BRAND}<div class="ttl"><b>Show Chef what you mean</b><span>${c.recording ? "Listening — just describe it" : "Screenshot + voice note"}</span></div>
+      <div class="hdr ${this.admin ? "" : "member"}">${this.mark()}<div class="ttl"><b>${this.admin ? "Show Chef what you mean" : "Request a feature"}</b><span>${c.recording ? "Listening — just describe it" : "Screenshot + voice note"}</span></div>
         <button class="min" id="cx" aria-label="Cancel" title="Cancel">✕</button></div>
       <div class="cbody">
         <div class="shots">${shots}${c.capturing ? `<span class="capturing"><span class="spin"></span>Capturing page…</span>` : ""}${canAdd ? `<button class="addshot" id="addshot">+ ${c.shots.length ? "Add another" : "Screenshot"}</button>` : ""}</div>
@@ -782,7 +865,7 @@ export class ChefPanelElement extends Base {
         ${c.note ? `<div class="note">${esc(c.note)}</div>` : ""}
         ${c.error ? `<div class="err">${esc(c.error)}</div>` : ""}
         <div class="row-btns" style="margin-top:0">
-          <button class="act" id="csend" ${c.sending || c.capturing ? "disabled" : ""}>${c.sending ? "Sending…" : "Send to Chef"}</button>
+          <button class="act" id="csend" ${c.sending || c.capturing ? "disabled" : ""}>${c.sending ? "Sending…" : this.admin ? "Send to Chef" : "Send"}</button>
           <button class="ghost" id="ccancel">Cancel</button>
         </div>
       </div>`;
@@ -862,8 +945,8 @@ export class ChefPanelElement extends Base {
     const transcript = c.transcript.trim();
     const description = (c.desc ?? transcript).trim();
     const title = (c.title || firstSentence(description) || (c.shots.length ? "Screenshot feedback" : "")).trim().slice(0, 200);
-    if (!title) { c.error = "Say or type what you'd like Chef to build."; return this.renderComposer(); }
-    if (!this.client) { c.error = "Chef isn't connected yet — try again in a moment."; return this.renderComposer(); }
+    if (!title) { c.error = "Say or type what you'd like."; return this.renderComposer(); }
+    if (!this.client) { c.error = "Not connected yet — try again in a moment."; return this.renderComposer(); }
     c.sending = true; c.error = ""; this.renderComposer();
     try {
       const screenshotStorageIds = [];
@@ -875,10 +958,11 @@ export class ChefPanelElement extends Base {
       });
       writeDraft(this.draftKey, "");
       this.closeComposer();
+      this.showToast(this.sentMessage());
     } catch (e) {
       if (this.c !== c) return;
       if (isUnauth(e)) {
-        c.error = "Sign in to send requests to Chef.";
+        c.error = "Sign in to send a request.";
       } else if (isMissingFn(e)) {
         // The host hasn't exposed the media functions: still file the request
         // as text so nothing the user said is lost.
@@ -887,6 +971,7 @@ export class ChefPanelElement extends Base {
           const desc = [description, transcript && transcript !== description ? `Voice note (transcript): ${transcript}` : ""].filter(Boolean).join("\n\n");
           await this.client.mutation(this.ref("submitRequest"), { title, description: desc });
           this.closeComposer();
+          this.showToast(this.sentMessage());
           return;
         } catch (e2) { c.error = `Couldn't send: ${isUnauth(e2) ? "sign in first" : errMsg(e2)}`; }
       } else {
