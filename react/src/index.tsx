@@ -18,19 +18,19 @@ import type { FunctionReference } from "convex/server";
 // The build-mode floating panel (todos / refinement questions / requests).
 // Lives in its own file because it's a different shape from the
 // feature-request widgets — it talks to the wow-shell wrapper functions.
-export { ChefPanel } from "./ChefPanel.js";
+export { ChefPanel } from "./ChefPanel";
 export type {
   ChefPanelApi,
   ChefRefinement,
   ChefRequest,
   ChefTodo,
   ChefProgress,
-} from "./ChefPanel.js";
+} from "./ChefPanel";
 
 // One-line mount for the <chef-panel> web component (panel/chef-panel.browser.js),
 // talking to the functions exposeChefApi creates.
-export { ChefPanelMount } from "./ChefPanelMount.js";
-export type { ChefPanelMountProps } from "./ChefPanelMount.js";
+export { ChefPanelMount } from "./ChefPanelMount";
+export type { ChefPanelMountProps } from "./ChefPanelMount";
 
 type AnyQuery<Args extends Record<string, any>, Returns = any> =
   FunctionReference<"query", "public", Args, Returns>;
