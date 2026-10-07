@@ -45,6 +45,9 @@ export type ChefPanelMountProps = {
   defaultOpen?: boolean;
   /** Launcher text for non-admins (default "Suggest a feature"). */
   memberLabel?: string;
+  /** Lift the button/panel clear of your own floating controls (px from the bottom / right; default 24). */
+  offsetBottom?: number;
+  offsetRight?: number;
 };
 
 let loaded: Promise<unknown> | null = null;
@@ -66,7 +69,7 @@ function loadPanel(src?: string): Promise<unknown> {
   return loaded;
 }
 
-export function ChefPanelMount({ convexUrl, prefix = "chef", token, getToken, src, defaultOpen, memberLabel }: ChefPanelMountProps) {
+export function ChefPanelMount({ convexUrl, prefix = "chef", token, getToken, src, defaultOpen, memberLabel, offsetBottom, offsetRight }: ChefPanelMountProps) {
   // Read through refs so the panel's fetcher always sees the latest auth.
   const auth = useRef({ token, getToken });
   auth.current = { token, getToken };
@@ -92,7 +95,11 @@ export function ChefPanelMount({ convexUrl, prefix = "chef", token, getToken, sr
     if (!el) return;
     if (memberLabel) el.setAttribute("member-label", memberLabel);
     else el.removeAttribute("member-label");
-  }, [convexUrl, prefix, memberLabel]);
+    if (offsetBottom !== undefined) el.setAttribute("offset-bottom", String(offsetBottom));
+    else el.removeAttribute("offset-bottom");
+    if (offsetRight !== undefined) el.setAttribute("offset-right", String(offsetRight));
+    else el.removeAttribute("offset-right");
+  }, [convexUrl, prefix, memberLabel, offsetBottom, offsetRight]);
 
   // Hand the panel our auth; re-hand it whenever the token changes so the
   // panel's client re-authenticates (sign-in, sign-out, refresh).

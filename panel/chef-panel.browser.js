@@ -76,11 +76,11 @@ const MEMBER_STATE_LABEL = {
 };
 
 const CSS = `
-  :host { all: initial; }
+  :host { all: initial; --chef-right: 24px; --chef-bottom: 24px; }
   * { box-sizing: border-box; }
 
   /* ---- minimized: branded Chef pill ---- */
-  .fab { position: fixed; right: 24px; bottom: 24px; z-index: 2147483000;
+  .fab { position: fixed; right: var(--chef-right); bottom: var(--chef-bottom); z-index: 2147483000;
     height: 52px; padding: 0 18px; border-radius: 999px; border: 0; cursor: pointer;
     display: inline-flex; align-items: center; gap: 10px;
     background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
@@ -100,7 +100,7 @@ const CSS = `
     font: 700 11px/1 ui-sans-serif, system-ui, sans-serif; display: inline-flex; align-items: center; justify-content: center; }
 
   /* ---- expanded card ---- */
-  .bubble { position: fixed; right: 24px; bottom: 24px; z-index: 2147483000;
+  .bubble { position: fixed; right: var(--chef-right); bottom: var(--chef-bottom); z-index: 2147483000;
     width: 380px; max-width: calc(100vw - 48px); max-height: min(660px, calc(100vh - 48px));
     display: flex; flex-direction: column;
     font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -173,7 +173,7 @@ const CSS = `
   /* ---- screenshot + voice composer (long-press / right-click the bubble) ---- */
   .fab { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
   .fab.pressing { transform: scale(.96); box-shadow: 0 0 0 6px rgba(234,88,12,.18), 0 10px 28px rgba(234,88,12,.30); }
-  .comp { position: fixed; right: 24px; bottom: 24px; z-index: 2147483001; width: 400px; max-width: calc(100vw - 32px);
+  .comp { position: fixed; right: var(--chef-right); bottom: var(--chef-bottom); z-index: 2147483001; width: 400px; max-width: calc(100vw - 32px);
     max-height: min(720px, calc(100vh - 32px)); display: flex; flex-direction: column; overflow: hidden;
     font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     color: #1f2937; background: #fffbf5; border: 1px solid #fed7aa; border-radius: 16px;
@@ -237,7 +237,12 @@ const CSS_EXTRA = `
   .mine .mt { flex: 1; min-width: 0; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mine .ms { flex-shrink: 0; font-size: 11px; font-weight: 600; }
   /* neutral (non-admin) look */
-  .fab.member { background: #fff; border: 1px solid #e5e7eb; box-shadow: 0 8px 24px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.08); }
+  /* Members: a compact round lightbulb; the label slides out on hover/focus. */
+  .fab.member { background: #fff; border: 1px solid #e5e7eb; box-shadow: 0 8px 24px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.08);
+    width: 48px; height: 48px; padding: 0; justify-content: center; gap: 0; }
+  .fab.member .lab { display: none; }
+  .fab.member:hover, .fab.member:focus-visible { width: auto; padding: 0 16px; gap: 8px; }
+  .fab.member:hover .lab, .fab.member:focus-visible .lab { display: inline; }
   .fab.member:hover { box-shadow: 0 12px 30px rgba(0,0,0,.18), 0 3px 8px rgba(0,0,0,.10); }
   .fab .bulb { width: 20px; height: 20px; color: #ea580c; flex-shrink: 0; }
   .fab .lab { font: 600 14px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1f2937; white-space: nowrap; }
@@ -246,7 +251,7 @@ const CSS_EXTRA = `
   .hdr.member .ttl b { color: #1f2937; }
   .hdr.member .ttl > span { color: #6b7280; }
   .hdr.member .min { background: #f3f4f6; color: #374151; }
-  .toast { position: fixed; right: 24px; bottom: 88px; z-index: 2147483003; padding: 9px 14px; border-radius: 10px;
+  .toast { position: fixed; right: var(--chef-right); bottom: calc(var(--chef-bottom) + 64px); z-index: 2147483003; padding: 9px 14px; border-radius: 10px;
     background: #111827; color: #fff; font: 600 13px/1.3 ui-sans-serif, system-ui, -apple-system, sans-serif;
     box-shadow: 0 8px 24px rgba(0,0,0,.2); animation: chef-in 160ms ease-out; }
   @keyframes chef-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -257,6 +262,7 @@ const Base = typeof HTMLElement === "undefined" ? class {} : HTMLElement;
 
 export class ChefPanelElement extends Base {
   connectedCallback() {
+    this.applyOffsets();
     if (this.shadowRoot) {
       // Re-attached: keep state; reconnect if a real removal closed the client.
       const url = this.getAttribute("convex-url");
@@ -358,8 +364,17 @@ export class ChefPanelElement extends Base {
     this._attUnsub = typeof unsub === "function" ? unsub : unsub && unsub.unsubscribe ? () => unsub.unsubscribe() : null;
   }
 
-  static get observedAttributes() { return ["member-label", "label"]; }
+  static get observedAttributes() { return ["member-label", "label", "offset-bottom", "offset-right"]; }
+  /** `offset-bottom` / `offset-right` (px): lift the button and panel clear of the host's own controls. */
+  applyOffsets() {
+    const px = (v) => (v && /^\d+(\.\d+)?$/.test(v) ? `${v}px` : v);
+    const b = this.getAttribute("offset-bottom");
+    const r = this.getAttribute("offset-right");
+    if (b) this.style.setProperty("--chef-bottom", px(b)); else this.style.removeProperty("--chef-bottom");
+    if (r) this.style.setProperty("--chef-right", px(r)); else this.style.removeProperty("--chef-right");
+  }
   attributeChangedCallback() {
+    this.applyOffsets();
     this.memberLabel = this.getAttribute("member-label") || this.getAttribute("label") || DEFAULT_MEMBER_LABEL;
     if (this.$wrap) this.render();
   }
