@@ -65,3 +65,19 @@ export const setRole = mutation({
     return null;
   },
 });
+
+/**
+ * Every admin's userId (for the host to notify them, e.g. email on a new request awaiting
+ * approval). Small by nature; capped at 100.
+ */
+export const listAdmins = query({
+  args: {},
+  returns: v.array(v.string()),
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("users")
+      .withIndex("by_role", (q) => q.eq("role", "admin"))
+      .take(100);
+    return rows.map((r) => r.userId);
+  },
+});

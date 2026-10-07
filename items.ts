@@ -519,3 +519,58 @@ export const countByState = query({
     return items.length;
   },
 });
+
+// ---------- approvals (members' requests wait in "submitted") ----------
+
+/**
+ * Requests from non-admins waiting for an admin, newest first (excludes merged items and
+ * refinements). Admins or agents only. Pair with attachments.listForItems for their media.
+ */
+export const listAwaitingApproval = query({
+  args: { limit: v.optional(v.number()), ...actorArgs },
+  returns: v.array(v.any()),
+  handler: async (ctx, args) => {
+    await requirePrivileged(ctx, args);
+    const limit = Math.min(100, Math.max(1, args.limit ?? 50));
+    const rows = await ctx.db
+      .query("items")
+      .withIndex("by_state", (q) => q.eq("state", "submitted"))
+      .order("desc")
+      .take(limit * 2);
+    return rows
+      .filter((i) => !i.mergedInto && i.kind !== "refinement")
+      .slice(0, limit)
+      .map(enrich);
+  },
+});
+
+/**
+ * An admin approves (→ "requested", the build queue) or rejects (→ "rejected") a request that's
+ * awaiting approval. `reviewerId` must be an admin; anything not in "submitted" is left alone.
+ * Returns the item's resulting state.
+ */
+export const review = mutation({
+  args: { itemId: v.id("items"), approve: v.boolean(), reviewerId: v.string() },
+  returns: vState,
+  handler: async (ctx, args) => {
+    const reviewer = await ctx.db
+      .query("users")
+      .withIndex("by_userId", (q) => q.eq("userId", args.reviewerId))
+      .unique();
+    if (reviewer?.role !== "admin") throw new Error("Unauthorized: only admins can approve or reject requests.");
+    const item = await ctx.db.get(args.itemId);
+    if (!item) throw new Error("Item not found");
+    if (item.state !== "submitted") return item.state;
+    const state = args.approve ? ("requested" as const) : ("rejected" as const);
+    await ctx.db.patch(args.itemId, { state });
+    await ctx.db.insert("notifications", {
+      userId: item.createdBy,
+      itemId: item._id,
+      type: args.approve ? "approved" : "rejected",
+      message: args.approve ? `“${item.title}” was approved` : `“${item.title}” was declined`,
+      isRead: false,
+      stamp: Date.now(),
+    });
+    return state;
+  },
+});

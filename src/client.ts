@@ -65,6 +65,9 @@ export class Feedback {
       ctx: RunMutationCtx,
       args: { userId: string; role: "admin" | "member" },
     ) => ctx.runMutation(this.component.users.setRole, args),
+    /** Every admin's userId (to notify them, e.g. about a request awaiting approval). */
+    listAdmins: (ctx: RunQueryCtx) =>
+      ctx.runQuery(this.component.users.listAdmins, {}),
   };
 
   items = {
@@ -97,6 +100,21 @@ export class Feedback {
       ctx: RunMutationCtx,
       args: { itemId: GenericId<"items">; state: ItemState },
     ) => ctx.runMutation(this.component.items.transitionState, args),
+
+    /**
+     * Requests from non-admins waiting for approval ("submitted"), newest first. Admins/agents only
+     * (pass `viewer` or `agentKey`). Pair with attachments.listForItems for screenshots/voice notes.
+     */
+    listAwaitingApproval: (
+      ctx: RunQueryCtx,
+      args: { limit?: number } & ActorArgs = {},
+    ) => ctx.runQuery(this.component.items.listAwaitingApproval, args),
+
+    /** An admin approves (→ "requested") or rejects (→ "rejected") a submitted request. */
+    review: (
+      ctx: RunMutationCtx,
+      args: { itemId: GenericId<"items">; approve: boolean; reviewerId: string },
+    ) => ctx.runMutation(this.component.items.review, args),
 
     listPublic: (
       ctx: RunQueryCtx,

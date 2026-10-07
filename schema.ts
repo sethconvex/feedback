@@ -27,7 +27,9 @@ export default defineSchema({
     userId: v.string(),
     role: v.union(v.literal("admin"), v.literal("member")),
     createdAt: v.number(),
-  }).index("by_userId", ["userId"]),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_role", ["role"]),
 
   items: defineTable({
     number: v.number(),

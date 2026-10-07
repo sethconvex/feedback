@@ -265,6 +265,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         { nextCursor: string | null; page: Array<any> },
         Name
       >;
+      listAwaitingApproval: FunctionReference<
+        "query",
+        "internal",
+        { agentKey?: string; limit?: number; viewer?: string | null },
+        Array<any>,
+        Name
+      >;
       listByState: FunctionReference<
         "query",
         "internal",
@@ -317,6 +324,18 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "internal",
         { itemId: string },
         null,
+        Name
+      >;
+      review: FunctionReference<
+        "mutation",
+        "internal",
+        { approve: boolean; itemId: string; reviewerId: string },
+        | "submitted"
+        | "requested"
+        | "planned"
+        | "inProgress"
+        | "rejected"
+        | "completed",
         Name
       >;
       transitionState: FunctionReference<
@@ -430,6 +449,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "internal",
         { userId: string },
         { createdAt: number; role: "admin" | "member"; userId: string } | null,
+        Name
+      >;
+      listAdmins: FunctionReference<
+        "query",
+        "internal",
+        {},
+        Array<string>,
         Name
       >;
       setRole: FunctionReference<

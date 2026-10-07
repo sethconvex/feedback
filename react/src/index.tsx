@@ -1130,3 +1130,85 @@ export function AdminPanel({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Approval queue (admins): members' requests wait in "submitted" until approved
+// ---------------------------------------------------------------------------
+
+export type PendingRequest = {
+  id: string;
+  title: string;
+  description: string;
+  /** Display name of who sent it (the host resolves it), if known. */
+  from: string | null;
+  /** ms since epoch. */
+  at: number;
+  attachments: { kind: string; url: string | null }[];
+};
+
+export type ApprovalQueueApi = {
+  /** Host query: the requests awaiting approval ([] for non-admins). Wraps items.listAwaitingApproval. */
+  list: AnyQuery<Record<string, never>, PendingRequest[]>;
+  /** Host mutation: approve or reject one (checks the caller is an admin). Wraps items.review. */
+  review: AnyMutation<{ id: string; approve: boolean }>;
+};
+
+/**
+ * Requests from non-admins waiting for an admin: title, who and when, text, screenshots and the
+ * voice note, with Approve (→ the build queue) and Reject. Renders nothing when the list is empty.
+ */
+export function ApprovalQueue({ api, className }: { api: ApprovalQueueApi; className?: string }) {
+  const pending = useQuery(api.list, {});
+  const review = useMutation(api.review);
+  const [busy, setBusy] = React.useState<string | null>(null);
+  if (!pending || pending.length === 0) return null;
+  const act = async (id: string, approve: boolean) => {
+    setBusy(id);
+    try {
+      await review({ id, approve });
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className={`ship-root ${className ?? ""}`}>
+      <h3 className="ship-title" style={{ fontSize: 15 }}>Waiting for your approval</h3>
+      <ul style={{ listStyle: "none", padding: 0, margin: "8px 0 0", display: "grid", gap: 10 }}>
+        {pending.map((r) => {
+          const body = r.description.split("\n\n_source")[0];
+          const audio = r.attachments.find((a) => a.kind === "audio")?.url;
+          const shots = r.attachments.filter((a) => a.kind === "screenshot" && a.url);
+          return (
+            <li key={r.id} style={{ padding: 12, border: "1px solid #e5e5e5", borderRadius: 10 }}>
+              <div style={{ fontWeight: 600 }}>{r.title}</div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>
+                {r.from ?? "Someone"} · {new Date(r.at).toLocaleString()}
+              </div>
+              {body && body !== r.title && (
+                <p style={{ fontSize: 13, whiteSpace: "pre-wrap", margin: "6px 0 0" }}>{body.slice(0, 600)}</p>
+              )}
+              {shots.length > 0 && (
+                <div style={{ display: "flex", gap: 6, overflowX: "auto", marginTop: 8 }}>
+                  {shots.map((s) => (
+                    <a key={s.url!} href={s.url!} target="_blank" rel="noreferrer">
+                      <img src={s.url!} alt="Screenshot" style={{ height: 110, borderRadius: 6 }} />
+                    </a>
+                  ))}
+                </div>
+              )}
+              {audio && <audio src={audio} controls preload="none" style={{ width: "100%", height: 32, marginTop: 8 }} />}
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button className="ship-btn-primary" disabled={busy === r.id} onClick={() => void act(r.id, true)}>
+                  Approve
+                </button>
+                <button className="ship-btn-secondary" disabled={busy === r.id} onClick={() => void act(r.id, false)}>
+                  Reject
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}

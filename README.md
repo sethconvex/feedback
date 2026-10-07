@@ -174,6 +174,46 @@ can contain private data, so consider turning off `communityBoardVisible` for
 apps where pre-triage requests shouldn't be public. The agent HTTP queue
 (`GET /agent/queue`) inlines `attachments: [{ kind, url, mimeType }]` per item.
 
+## Approvals (members' requests)
+
+Only admins' requests go straight to the build queue (`autoApprove` is ignored for everyone else);
+members' requests wait in `submitted`. Give admins a place to approve them:
+
+```ts
+// convex/chef.ts (host)
+export const awaitingApproval = query({
+  args: {},
+  handler: async (ctx) => {
+    const me = await getAuthUserId(ctx);
+    if (!me) return [];
+    const items = await feedback.items.listAwaitingApproval(ctx, { viewer: me }).catch(() => []);
+    // + feedback.attachments.listForItems(ctx, { itemIds, viewer: me }) for screenshots / voice notes
+    return items.map((i) => ({ id: i._id, title: i.title, description: i.description, from: null, at: i._creationTime, attachments: [] }));
+  },
+});
+export const review = mutation({
+  args: { id: v.string(), approve: v.boolean() },
+  handler: async (ctx, { id, approve }) =>
+    feedback.items.review(ctx, { itemId: id as any, approve, reviewerId: (await getAuthUserId(ctx))! }),
+});
+```
+
+```tsx
+import { ApprovalQueue } from "@convex-dev/feedback/react";
+<ApprovalQueue api={{ list: api.chef.awaitingApproval, review: api.chef.review }} />
+```
+
+`review` checks the reviewer is an admin, moves `submitted` → `requested` (approve) or `rejected`,
+and notifies the requester. To tell admins a request is waiting (e.g. by email), check the new
+item's state after `items.create` and message `feedback.users.listAdmins(ctx)`:
+
+```ts
+const itemId = await feedback.items.create(ctx, { userId, title, description, autoApprove: true });
+if ((await feedback.items.get(ctx, { itemId }))?.state === "submitted") {
+  for (const adminId of await feedback.users.listAdmins(ctx)) { /* email / push them */ }
+}
+```
+
 ## Trust model
 
 The component never reads `ctx.auth`. Every mutation takes a `userId: string` arg — the host authenticates first, then forwards a trusted ID. Works with any auth provider.
