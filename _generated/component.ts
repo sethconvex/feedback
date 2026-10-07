@@ -217,6 +217,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         number,
         Name
       >;
+      complete: FunctionReference<
+        "mutation",
+        "internal",
+        { changelog?: string; itemId: string },
+        null,
+        Name
+      >;
       countByState: FunctionReference<
         "query",
         "internal",
@@ -334,6 +341,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         any,
         Name
       >;
+      listShippedSince: FunctionReference<
+        "query",
+        "internal",
+        { limit?: number; since: number },
+        Array<{ _id: string; changelog: string; completedAt: number }>,
+        Name
+      >;
       merge: FunctionReference<
         "mutation",
         "internal",
@@ -358,6 +372,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         | "inProgress"
         | "rejected"
         | "completed",
+        Name
+      >;
+      setChangelog: FunctionReference<
+        "mutation",
+        "internal",
+        { itemId: string; text: string },
+        null,
         Name
       >;
       transitionState: FunctionReference<

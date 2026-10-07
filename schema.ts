@@ -50,6 +50,10 @@ export default defineSchema({
     // Verbatim voice-note transcript, kept apart from the (editable)
     // description so readers can tell what was typed from what was said.
     transcript: v.optional(v.string()),
+    // Short, user-facing release note ("You can now export your book as a
+    // PDF."), written by the admin/agent when the item ships — never the raw
+    // request text. Completed items with a changelog power "What's new".
+    changelog: v.optional(v.string()),
   })
     .index("by_state", ["state"])
     .index("by_createdBy", ["createdBy"])

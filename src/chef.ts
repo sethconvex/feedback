@@ -19,11 +19,16 @@ import { Feedback, type ItemState } from "./client.js";
  *   export const {
  *     agentState, listPublicItems, submitRequest, upvoteRequest, answerRefinement, skipRefinement,
  *     generateUploadUrl, submitRequestWithMedia, listAttachments,
- *     mine, amAdmin, awaitingApproval, review,
+ *     mine, amAdmin, awaitingApproval, review, whatsNew,
  *   } = exposeChefApi(components.feedback, { getUserId: getAuthUserId });
  *
  * Clients address the functions by module name (`chef:submitRequest`, …) — the
  * panel's `prefix` attribute / ChefKit's `prefix` — so the host may pick any name.
+ *
+ * `whatsNew({ since })` is the release-notes feed the clients pop up on launch:
+ * completed requests with an admin-written changelog (`feedback.items.complete(ctx,
+ * { itemId, changelog })`) that shipped after `since` (ms). Public: anyone, signed
+ * in or not, may read it — it returns only the changelog line and ship time.
  *
  * Trust model (same as the rest of the component): identity always comes from
  * `getUserId(ctx)` (i.e. the caller's auth token), never from arguments. Writes
@@ -387,6 +392,20 @@ export function exposeChefApi(component: any, options: ChefApiOptions) {
     },
   });
 
+  /**
+   * Release notes: what shipped after `since` (ms epoch), newest first (≤50).
+   * Public — only the admin-written changelog line and ship time are returned.
+   */
+  const whatsNew = queryGeneric({
+    args: { since: v.number() },
+    returns: v.array(v.object({ id: v.string(), text: v.string(), at: v.number() })),
+    handler: async (ctx, a) => {
+      const since = Number.isFinite(a.since) ? a.since : 0;
+      const rows = await feedback.items.listShippedSince(ctx, { since, limit: 50 });
+      return rows.map((r) => ({ id: String(r._id), text: r.changelog, at: r.completedAt }));
+    },
+  });
+
   // ---------------------------------------------------------------- mutations
 
   /** Upload URL (component storage) for one screenshot or voice note. Signed-in only. */
@@ -504,5 +523,6 @@ export function exposeChefApi(component: any, options: ChefApiOptions) {
     amAdmin,
     awaitingApproval,
     review,
+    whatsNew,
   };
 }

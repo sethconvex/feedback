@@ -102,6 +102,37 @@ export class Feedback {
     ) => ctx.runMutation(this.component.items.transitionState, args),
 
     /**
+     * Set the item's user-facing changelog line ("You can now export as PDF."),
+     * trimmed to 280 chars; empty text clears it. Shown under "What's new" once
+     * the item is completed. Admin/agent paths only — never raw request text.
+     */
+    setChangelog: (
+      ctx: RunMutationCtx,
+      args: { itemId: GenericId<"items"> | string; text: string },
+    ): Promise<null> => ctx.runMutation(this.component.items.setChangelog, args),
+
+    /**
+     * Ship an item: record its changelog (optional) and move it to "completed"
+     * (stamps completedAt, notifies supporters like transitionState).
+     *
+     *   await feedback.items.complete(ctx, { itemId, changelog: "Dark mode is here." });
+     */
+    complete: (
+      ctx: RunMutationCtx,
+      args: { itemId: GenericId<"items"> | string; changelog?: string },
+    ): Promise<null> => ctx.runMutation(this.component.items.complete, args),
+
+    /**
+     * Release notes: completed items with a changelog that shipped after `since`
+     * (ms epoch), newest first (limit default 20, max 50). Public-safe.
+     */
+    listShippedSince: (
+      ctx: RunQueryCtx,
+      args: { since: number; limit?: number },
+    ): Promise<Array<{ _id: string; changelog: string; completedAt: number }>> =>
+      ctx.runQuery(this.component.items.listShippedSince, args),
+
+    /**
      * Requests from non-admins waiting for approval ("submitted"), newest first. Admins/agents only
      * (pass `viewer` or `agentKey`). Pair with attachments.listForItems for screenshots/voice notes.
      */

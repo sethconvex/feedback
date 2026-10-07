@@ -291,54 +291,156 @@ export const listAll = query({
 
 // ---------- state transitions (with notifications) ----------
 
+/**
+ * Move an item to `state`, stamping `completedAt` on "completed", and notify its
+ * supporters + submitter. Shared by transitionState and complete so every path
+ * to a state change notifies the same way. No-op when already in that state.
+ */
+async function applyTransition(
+  ctx: any,
+  item: Doc<"items">,
+  state: Doc<"items">["state"],
+): Promise<void> {
+  if (item.state === state) return;
+  const itemId = item._id;
+  const patch: any = { state };
+  if (state === "completed") patch.completedAt = Date.now();
+  await ctx.db.patch(itemId, patch);
+
+  const type =
+    state === "requested" && item.state === "submitted"
+      ? "approved"
+      : state === "rejected"
+        ? "rejected"
+        : state === "completed"
+          ? "completed"
+          : "stateChanged";
+  const message =
+    type === "approved"
+      ? `"${item.title}" was approved and is now accepting votes.`
+      : type === "rejected"
+        ? `"${item.title}" was rejected.`
+        : type === "completed"
+          ? `"${item.title}" has shipped!`
+          : `"${item.title}" is now ${state}.`;
+  await notifySupporters(ctx, itemId, type, message);
+  // Also notify the submitter even if they haven't bid on it.
+  const supporters: Doc<"bids">[] = await ctx.db
+    .query("bids")
+    .withIndex("by_item", (q: any) => q.eq("itemId", itemId))
+    .collect();
+  const submitterAlreadyNotified = supporters.some(
+    (b) => b.userId === item.createdBy,
+  );
+  if (!submitterAlreadyNotified) {
+    await ctx.db.insert("notifications", {
+      userId: item.createdBy,
+      itemId,
+      type,
+      message,
+      isRead: false,
+      stamp: Date.now(),
+    });
+  }
+}
+
 export const transitionState = mutation({
   args: { itemId: v.id("items"), state: vState },
   returns: v.null(),
   handler: async (ctx, args) => {
     const item = await ctx.db.get(args.itemId);
     if (!item) throw new Error("Item not found");
-    if (item.state === args.state) return null;
+    await applyTransition(ctx, item, args.state);
+    return null;
+  },
+});
 
-    const patch: any = { state: args.state };
-    if (args.state === "completed") patch.completedAt = Date.now();
-    await ctx.db.patch(args.itemId, patch);
+// ---------- changelogs ("What's new") ----------
 
-    const type =
-      args.state === "requested" && item.state === "submitted"
-        ? "approved"
-        : args.state === "rejected"
-          ? "rejected"
-          : args.state === "completed"
-            ? "completed"
-            : "stateChanged";
-    const message =
-      type === "approved"
-        ? `"${item.title}" was approved and is now accepting votes.`
-        : type === "rejected"
-          ? `"${item.title}" was rejected.`
-          : type === "completed"
-            ? `"${item.title}" has shipped!`
-            : `"${item.title}" is now ${args.state}.`;
-    await notifySupporters(ctx, args.itemId, type, message);
-    // Also notify the submitter even if they haven't bid on it.
-    const supporters = await ctx.db
-      .query("bids")
-      .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
-      .collect();
-    const submitterAlreadyNotified = supporters.some(
-      (b) => b.userId === item.createdBy,
-    );
-    if (!submitterAlreadyNotified) {
-      await ctx.db.insert("notifications", {
-        userId: item.createdBy,
-        itemId: args.itemId,
-        type,
-        message,
-        isRead: false,
-        stamp: Date.now(),
+const MAX_CHANGELOG = 280;
+
+/** Trimmed, ≤280 chars; undefined when empty (= clear). */
+function cleanChangelog(text: string): string | undefined {
+  const t = text.trim().replace(/\s+/g, " ");
+  return t ? t.slice(0, MAX_CHANGELOG) : undefined;
+}
+
+/**
+ * Set (or, with empty text, clear) an item's user-facing changelog line — what
+ * users see under "What's new" once the item is completed. Host-gated like
+ * transitionState: call it from an admin/agent path, never with raw user text.
+ */
+export const setChangelog = mutation({
+  args: { itemId: v.id("items"), text: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.itemId);
+    if (!item) throw new Error("Item not found");
+    await ctx.db.patch(args.itemId, { changelog: cleanChangelog(args.text) });
+    return null;
+  },
+});
+
+/**
+ * Ship an item: optionally record its changelog line, then transition it to
+ * "completed" (stamps completedAt, notifies supporters + submitter exactly like
+ * transitionState). Host-gated.
+ */
+export const complete = mutation({
+  args: { itemId: v.id("items"), changelog: v.optional(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.itemId);
+    if (!item) throw new Error("Item not found");
+    if (args.changelog !== undefined) {
+      await ctx.db.patch(args.itemId, {
+        changelog: cleanChangelog(args.changelog),
       });
     }
+    await applyTransition(ctx, item, "completed");
     return null;
+  },
+});
+
+/**
+ * Release notes: completed (non-merged, non-refinement) items that have a
+ * changelog and shipped after `since` (ms), newest first. Public-safe — only
+ * the admin-written changelog line and the ship time are returned.
+ */
+export const listShippedSince = query({
+  args: { since: v.number(), limit: v.optional(v.number()) },
+  returns: v.array(
+    v.object({
+      _id: v.id("items"),
+      changelog: v.string(),
+      completedAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const limit = Math.min(50, Math.max(1, Math.floor(args.limit ?? 20)));
+    // Completed items, newest-created first. Small scale: a bounded scan is
+    // fine (completedAt isn't indexed; ship order ≈ creation order).
+    const rows = await ctx.db
+      .query("items")
+      .withIndex("by_state", (q) => q.eq("state", "completed"))
+      .order("desc")
+      .take(500);
+    return rows
+      .filter(
+        (i) =>
+          !i.mergedInto &&
+          i.kind !== "refinement" &&
+          !!i.changelog &&
+          typeof i.completedAt === "number" &&
+          i.completedAt > args.since,
+      )
+      .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))
+      .slice(0, limit)
+      .map((i) => ({
+        _id: i._id,
+        changelog: i.changelog!,
+        completedAt: i.completedAt!,
+      }));
   },
 });
 
