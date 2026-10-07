@@ -4,6 +4,133 @@ Embeddable feature-request & voting backend as a [Convex component](https://docs
 
 Drop a feature-request workflow into any Convex app with one line in your `convex.config.ts`.
 
+## Install in 3 steps
+
+Adds the **Chef** bubble to your app: anyone signed in can send a request (typed, or a
+screenshot + voice note with a live transcript), vote, and see what they asked for; admins
+approve requests, see build status, and answer Chef's questions.
+
+**1. Install the component.**
+
+```sh
+npm install github:sethconvex/feedback   # pin a commit with #<sha> for reproducible builds
+```
+
+```ts
+// convex/convex.config.ts
+import { defineApp } from "convex/server";
+import feedback from "@convex-dev/feedback/convex.config";
+
+const app = defineApp();
+app.use(feedback);
+export default app;
+```
+
+**2. Expose the Chef API — one file.**
+
+```ts
+// convex/chef.ts
+import { exposeChefApi } from "@convex-dev/feedback";
+import { components } from "./_generated/api";
+import { getAuthUserId } from "@convex-dev/auth/server"; // or any (ctx) => Promise<string | null>
+
+export const {
+  agentState, listPublicItems, submitRequest, upvoteRequest, answerRefinement, skipRefinement,
+  generateUploadUrl, submitRequestWithMedia, listAttachments,
+  mine, amAdmin, awaitingApproval, review,
+} = exposeChefApi(components.feedback, {
+  getUserId: getAuthUserId, // who is calling (null = signed out)
+});
+```
+
+Not on Convex Auth? Any identity works, e.g.
+`getUserId: async (ctx) => (await ctx.auth.getUserIdentity())?.subject ?? null` (Clerk, Auth0, …).
+
+**3. Add the panel.** In a React / Next.js app, inside your Convex provider (a client component):
+
+```tsx
+import { ChefPanelMount } from "@convex-dev/feedback/react";
+import { useAuthToken } from "@convex-dev/auth/react";
+
+<ChefPanelMount convexUrl={process.env.NEXT_PUBLIC_CONVEX_URL!} token={useAuthToken()} />
+```
+
+(Clerk: `getToken={() => getToken({ template: "convex" })}` instead of `token`.) Any other
+page — the panel is a plain web component with no build step:
+
+```html
+<script type="module" src="https://cdn.jsdelivr.net/gh/sethconvex/feedback@main/panel/chef-panel.browser.js"></script>
+<chef-panel convex-url="https://YOUR-DEPLOYMENT.convex.cloud" prefix="chef"></chef-panel>
+<script type="module">
+  // Hand it the signed-in user's Convex token so requests are attributed:
+  document.querySelector("chef-panel").setAuth(async ({ forceRefreshToken }) => getMyConvexToken(forceRefreshToken));
+</script>
+```
+
+`prefix` is the module you exported the API from (`convex/chef.ts` → `"chef"`, the default). With a
+bundler you can also `import "@convex-dev/feedback/panel"` to register `<chef-panel>`.
+
+**iOS:** the same `convex/chef.ts` powers ChefKit, the Swift package — see `ios/` (coming in the
+same PR series).
+
+### Admins
+
+The **first user to send a request** (or otherwise register) becomes the admin — so sign in and
+send Chef your first request before you share the app. Admins' requests go straight to the build
+queue; everyone else's wait under **"Waiting for your approval"** in the admin's panel (with their
+screenshots and voice note). To make someone else an admin:
+
+```ts
+// convex/setupChef.ts — run with: npx convex run setupChef:makeAdmin '{"userId":"<id>"}'
+import { internalMutation } from "./_generated/server";
+import { v } from "convex/values";
+import { Feedback } from "@convex-dev/feedback";
+import { components } from "./_generated/api";
+
+export const makeAdmin = internalMutation({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) =>
+    new Feedback(components.feedback).users.setRole(ctx, { userId, role: "admin" }),
+});
+```
+
+### Get an email when a request needs approval
+
+`onSubmitted` runs inside the submitting mutation, after the request and its media are saved:
+
+```ts
+import { internal } from "./_generated/api";
+import { Feedback } from "@convex-dev/feedback";
+
+const feedback = new Feedback(components.feedback);
+
+export const { /* …same 13 names… */ } = exposeChefApi(components.feedback, {
+  getUserId: getAuthUserId,
+  onSubmitted: async (ctx, { itemId, title, description, state }) => {
+    if (state !== "submitted") return; // an admin's own request: already queued
+    const adminIds = await feedback.users.listAdmins(ctx);
+    // Send from an action (e.g. with @convex-dev/resend), not inline:
+    await ctx.scheduler.runAfter(0, internal.emails.chefRequestWaiting, { adminIds, itemId, title, description });
+  },
+});
+```
+
+Other options: `agentKey` (e.g. `() => process.env.FEEDBACK_AGENT_KEY`; only used on behalf of
+verified admins), `getUserName` (shown as "from" in approvals), `includeCommunity` (show
+not-yet-approved requests on the public list; default off), `autoRegister` (default on).
+
+### What `exposeChefApi` enforces
+
+- Identity comes only from `getUserId(ctx)` — never from arguments. Signed-out callers get
+  `ConvexError({ code: "UNAUTHENTICATED" })` from writes, and empty results / `false` from queries.
+- Requests need a title; at most 4 screenshots + 1 voice note, no duplicate uploads (type, size and
+  freshness are checked by the component). Voice notes carry the client's transcript; no server
+  transcription is involved.
+- Only admins auto-approve, see approvals (`awaitingApproval`, `review`) and build status
+  (`agentState`), and answer/skip Chef's questions (before anyone has registered, the build
+  status is open so the scaffolding agent can work).
+- `mine` returns the caller's own requests (≤50, newest first) with media counts.
+
 ## Packages
 
 - **Root** (`@convex-dev/feedback`) — the Convex component: items, bids, devLogs, notifications, agentKeys, HTTP agent routes.
@@ -216,7 +343,7 @@ if ((await feedback.items.get(ctx, { itemId }))?.state === "submitted") {
 
 ## Trust model
 
-The component never reads `ctx.auth`. Every mutation takes a `userId: string` arg — the host authenticates first, then forwards a trusted ID. Works with any auth provider.
+The component never reads `ctx.auth` (`exposeChefApi` reads it in *your* module, through the `getUserId` you pass). Every mutation takes a `userId: string` arg — the host authenticates first, then forwards a trusted ID. Works with any auth provider.
 
 ## Agent API
 
