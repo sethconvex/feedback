@@ -120,7 +120,8 @@ const CSS = `
     background: rgba(154,52,18,.08); color: #9a3412; font-size: 16px; line-height: 1; display: grid; place-items: center; }
   .min:hover { background: rgba(154,52,18,.16); }
 
-  .body { overflow-y: auto; padding: 14px; background: #fffbf5; flex: 1; display: grid; gap: 16px; }
+  /* minmax(0,1fr): a grid column otherwise grows to its widest nowrap line and the body scrolls sideways */
+  .body { overflow-y: auto; overflow-x: hidden; padding: 14px; background: #fffbf5; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #9a3412; margin-bottom: 7px; }
   .lbl .spin { display: inline-block; width: 11px; height: 11px; margin-left: 6px; vertical-align: -1px;
     border: 2px solid rgba(234,88,12,.3); border-top-color: #ea580c; border-radius: 50%; animation: chef-spin .8s linear infinite; }
@@ -177,7 +178,7 @@ const CSS = `
     font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     color: #1f2937; background: #fffbf5; border: 1px solid #fed7aa; border-radius: 16px;
     box-shadow: 0 20px 50px rgba(0,0,0,.22), 0 6px 12px rgba(0,0,0,.08); }
-  .comp .cbody { overflow-y: auto; padding: 14px; display: grid; gap: 12px; }
+  .comp .cbody { overflow-y: auto; overflow-x: hidden; padding: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .shots { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .shot { position: relative; width: 84px; height: 60px; border-radius: 8px; overflow: hidden; border: 1px solid #fdba74;
     background: #fff; cursor: zoom-in; padding: 0; }
