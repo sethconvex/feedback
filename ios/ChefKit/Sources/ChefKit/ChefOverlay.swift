@@ -126,38 +126,19 @@ struct ChefOverlayRoot: View {
 
 // MARK: - Button
 
-/// A chef's hat, drawn (no asset catalog needed).
-struct ChefHat: Shape {
-    func path(in r: CGRect) -> Path {
-        var p = Path()
-        let w = r.width, h = r.height
-        // Puffy top: three overlapping circles.
-        p.addEllipse(in: CGRect(x: r.minX + w * 0.02, y: r.minY + h * 0.22, width: w * 0.42, height: h * 0.42))
-        p.addEllipse(in: CGRect(x: r.minX + w * 0.25, y: r.minY + h * 0.02, width: w * 0.5, height: h * 0.48))
-        p.addEllipse(in: CGRect(x: r.minX + w * 0.56, y: r.minY + h * 0.22, width: w * 0.42, height: h * 0.42))
-        // Body + band.
-        p.addRoundedRect(in: CGRect(x: r.minX + w * 0.2, y: r.minY + h * 0.42, width: w * 0.6, height: h * 0.38),
-                         cornerSize: CGSize(width: 3, height: 3))
-        p.addRoundedRect(in: CGRect(x: r.minX + w * 0.16, y: r.minY + h * 0.8, width: w * 0.68, height: h * 0.18),
-                         cornerSize: CGSize(width: 3, height: 3))
-        return p
-    }
-}
-
-/// The hat + "Chef" wordmark used on the button and in sheet titles.
+/// The Chef logo (bundled vector art), used on the admin button and in sheet titles.
 struct ChefMark: View {
-    var size: CGFloat = 20
+    var height: CGFloat = 26
     var body: some View {
-        HStack(spacing: 5) {
-            ChefHat().frame(width: size, height: size)
-            Text("Chef").font(.headline)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Chef")
+        Image("ChefLogo", bundle: .module)
+            .resizable()
+            .scaledToFit()
+            .frame(height: height)
+            .accessibilityLabel("Chef")
     }
 }
 
-/// Admins: the Chef hat. Everyone else: a neutral "Suggest a feature" button (no Chef branding).
+/// Admins: the Chef logo. Everyone else: a neutral "Suggest a feature" button (no Chef branding).
 struct ChefButton: View {
     @Environment(ChefModel.self) private var model
 
@@ -177,9 +158,9 @@ struct ChefButton: View {
                 }
             }
                 .foregroundStyle(.primary)
-                .padding(.horizontal, admin || member.showsTitle ? 14 : 0)
+                .padding(.horizontal, admin ? 12 : member.showsTitle ? 14 : 0)
                 .frame(minWidth: 48, minHeight: 48)
-                .background(Capsule().fill(.regularMaterial))
+                .background(Capsule().fill(admin ? AnyShapeStyle(Color.white) : AnyShapeStyle(.regularMaterial)))
                 .overlay(Capsule().strokeBorder(Color(uiColor: .separator), lineWidth: 0.5))
                 .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
             if pending > 0 {

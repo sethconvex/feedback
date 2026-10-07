@@ -19,7 +19,8 @@ let package = Package(
         .target(
             name: "ChefKit",
             dependencies: [.product(name: "ConvexMobile", package: "convex-swift")],
-            path: "ios/ChefKit/Sources/ChefKit"
+            path: "ios/ChefKit/Sources/ChefKit",
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "ChefKitTests",
