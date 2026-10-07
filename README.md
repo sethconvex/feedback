@@ -368,3 +368,16 @@ mountAgentRoutes(http, components.feedback);
 ```
 
 Then issue bearer tokens in the admin UI and paste agent prompts into Claude / Cursor / Codex.
+
+## iOS
+
+**ChefKit** is the drop-in SwiftUI client (floating Chef button, screenshot + voice-note composer, offline outbox,
+requests/questions sheet, admin approvals). Add this repo as a Swift package (`https://github.com/sethconvex/feedback`,
+product `ChefKit`), add `NSMicrophoneUsageDescription` + `NSSpeechRecognitionUsageDescription` to Info.plist, then:
+
+```swift
+import ChefKit
+ChefKit.install(client: convex, prefix: "chef")
+```
+
+Details: [ios/README.md](ios/README.md).
