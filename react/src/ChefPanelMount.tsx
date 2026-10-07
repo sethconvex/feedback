@@ -48,6 +48,11 @@ export type ChefPanelMountProps = {
   /** Lift the button/panel clear of your own floating controls (px from the bottom / right; default 24). */
   offsetBottom?: number;
   offsetRight?: number;
+  /**
+   * Pop up a "What's new" card listing changelogs shipped since the visitor's last
+   * visit (`<prefix>:whatsNew`). Default true; false sets `whats-new="off"`.
+   */
+  whatsNew?: boolean;
 };
 
 let loaded: Promise<unknown> | null = null;
@@ -69,7 +74,7 @@ function loadPanel(src?: string): Promise<unknown> {
   return loaded;
 }
 
-export function ChefPanelMount({ convexUrl, prefix = "chef", token, getToken, src, defaultOpen, memberLabel, offsetBottom, offsetRight }: ChefPanelMountProps) {
+export function ChefPanelMount({ convexUrl, prefix = "chef", token, getToken, src, defaultOpen, memberLabel, offsetBottom, offsetRight, whatsNew = true }: ChefPanelMountProps) {
   // Read through refs so the panel's fetcher always sees the latest auth.
   const auth = useRef({ token, getToken });
   auth.current = { token, getToken };
@@ -86,6 +91,7 @@ export function ChefPanelMount({ convexUrl, prefix = "chef", token, getToken, sr
       el.setAttribute("convex-url", convexUrl);
       el.setAttribute("prefix", prefix);
       if (defaultOpen) el.setAttribute("open", "1");
+      if (!whatsNew) el.setAttribute("whats-new", "off");
       document.body.appendChild(el);
     }
   }, [convexUrl, prefix, src, defaultOpen]);
@@ -99,7 +105,9 @@ export function ChefPanelMount({ convexUrl, prefix = "chef", token, getToken, sr
     else el.removeAttribute("offset-bottom");
     if (offsetRight !== undefined) el.setAttribute("offset-right", String(offsetRight));
     else el.removeAttribute("offset-right");
-  }, [convexUrl, prefix, memberLabel, offsetBottom, offsetRight]);
+    if (!whatsNew) el.setAttribute("whats-new", "off");
+    else el.removeAttribute("whats-new");
+  }, [convexUrl, prefix, memberLabel, offsetBottom, offsetRight, whatsNew]);
 
   // Hand the panel our auth; re-hand it whenever the token changes so the
   // panel's client re-authenticates (sign-in, sign-out, refresh).

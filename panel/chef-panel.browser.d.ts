@@ -9,6 +9,8 @@ export type ChefAuthTokenFetcher = (args: { forceRefreshToken: boolean }) => Pro
  *   - `prefix`: the Convex module exposing `exposeChefApi` (default "chef")
  *   - `member-label`: the launcher's text for non-admins (default "Suggest a feature")
  *   - `open="1"`: start expanded
+ *   - `offset-bottom` / `offset-right` (px): lift the launcher clear of your own controls
+ *   - `whats-new="off"`: don't pop up the "What's new" card (changelogs from `<prefix>:whatsNew`)
  *
  * Admins (server `amAdmin`) see Chef: branding, build status, questions, approvals.
  * Everyone else sees a neutral lightbulb launcher with "Request a feature" + their own requests.

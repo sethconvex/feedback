@@ -17,6 +17,11 @@
 //     "Suggest a feature" button (override with `member-label="Feedback"`), and
 //     only "Request a feature" plus their own requests. No Chef branding.
 //
+// What's new: once per page load the panel asks `<prefix>:whatsNew({ since })` for
+// changelogs shipped since this browser last looked (localStorage
+// "chef-whatsnew-seen:<prefix>"; a first visit just records "now") and, if there are
+// any, shows a small "What's new" card above the launcher. `whats-new="off"` disables it.
+//
 // Auth: hand the panel a token fetcher with `panel.setAuth(fetchToken)` — same
 // signature as ConvexClient.setAuth: ({ forceRefreshToken }) => Promise<string|null>.
 // Without it the panel is read-only (sending requires a signed-in user).
@@ -46,6 +51,7 @@ const BRAND_SRC = "https://chef.convex.dev/chef.svg";
 const BRAND = `<img class="brand" src="${BRAND_SRC}" alt="Chef" />`;
 // Neutral mark for everyone who isn't an admin.
 const BULB = `<svg class="bulb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"/></svg>`;
+const SPARK = `<svg class="spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>`;
 const DEFAULT_MEMBER_LABEL = "Suggest a feature";
 
 // Screenshot lib: loaded lazily (first capture) from a CDN, pinned.
@@ -255,6 +261,30 @@ const CSS_EXTRA = `
     background: #111827; color: #fff; font: 600 13px/1.3 ui-sans-serif, system-ui, -apple-system, sans-serif;
     box-shadow: 0 8px 24px rgba(0,0,0,.2); animation: chef-in 160ms ease-out; }
   @keyframes chef-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  /* ---- "What's new" card (above the launcher; fixed, so the page never shifts) ---- */
+  .wn { position: fixed; right: var(--chef-right); bottom: calc(var(--chef-bottom) + 64px); z-index: 2147483000;
+    width: 320px; max-width: calc(100vw - 32px); max-height: min(420px, calc(100vh - var(--chef-bottom) - 96px));
+    display: flex; flex-direction: column; overflow: hidden;
+    font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2937; background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
+    box-shadow: 0 16px 40px rgba(0,0,0,.16), 0 4px 10px rgba(0,0,0,.08); animation: chef-in 180ms ease-out; }
+  .wn[hidden] { display: none; }
+  .wn .wh { display: flex; align-items: center; gap: 8px; padding: 11px 12px 6px 14px; }
+  .wn .wh .brand { height: 20px; width: auto; display: block; flex-shrink: 0; }
+  .wn .wh .spark { width: 18px; height: 18px; color: #ea580c; flex-shrink: 0; }
+  .wn .wh b { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; color: #111827; }
+  .wn .wx { flex-shrink: 0; width: 28px; height: 28px; border: 0; border-radius: 8px; cursor: pointer;
+    background: transparent; color: #6b7280; font-size: 18px; line-height: 1; display: grid; place-items: center; }
+  .wn .wx:hover { background: #f3f4f6; color: #111827; }
+  .wn ul { list-style: none; margin: 0; padding: 2px 14px 4px; overflow-y: auto; display: grid; gap: 8px; }
+  .wn li { display: grid; grid-template-columns: 8px minmax(0, 1fr); gap: 0 9px; }
+  .wn li::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: #ea580c; margin-top: 7px; }
+  .wn li .wt { color: #1f2937; overflow-wrap: anywhere; }
+  .wn li .wd { grid-column: 2; font-size: 11px; color: #6b7280; }
+  .wn .wm { padding: 2px 14px 0 31px; font-size: 12px; color: #6b7280; }
+  .wn .wf { padding: 10px 14px 12px; }
+  .wn .wf button.act { width: 100%; }
+  @media (prefers-reduced-motion: reduce) { .wn, .toast { animation: none; } }
   .flash { font-size: 12px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 7px 9px; }
 `;
 
@@ -316,6 +346,7 @@ export class ChefPanelElement extends Base {
     watch("mine", {}, (r) => { this.mineList = r || []; this.render(); });
     watch("awaitingApproval", {}, (r) => { this.pending = r || []; this.render(); });
     watch("amAdmin", {}, (r) => { this.admin = r === true; this.render(); });
+    this.checkWhatsNew();
     // Feature-detect the media functions with a harmless query.
     this.client.query(this.ref("listAttachments"), { itemIds: [] })
       .then(() => { this.mediaOk = true; this.watchAttachments(); this.render(); })
@@ -327,6 +358,7 @@ export class ChefPanelElement extends Base {
     queueMicrotask(() => {
       if (this.isConnected) return;
       if (this.$comp) this.closeComposer();
+      this.closeWhatsNew(false);
       if (this.client) { this.client.close(); this.client = null; }
     });
   }
@@ -364,7 +396,7 @@ export class ChefPanelElement extends Base {
     this._attUnsub = typeof unsub === "function" ? unsub : unsub && unsub.unsubscribe ? () => unsub.unsubscribe() : null;
   }
 
-  static get observedAttributes() { return ["member-label", "label", "offset-bottom", "offset-right"]; }
+  static get observedAttributes() { return ["member-label", "label", "offset-bottom", "offset-right", "whats-new"]; }
   /** `offset-bottom` / `offset-right` (px): lift the button and panel clear of the host's own controls. */
   applyOffsets() {
     const px = (v) => (v && /^\d+(\.\d+)?$/.test(v) ? `${v}px` : v);
@@ -375,6 +407,7 @@ export class ChefPanelElement extends Base {
   }
   attributeChangedCallback() {
     this.applyOffsets();
+    if (this.getAttribute("whats-new") === "off") this.closeWhatsNew(false);
     this.memberLabel = this.getAttribute("member-label") || this.getAttribute("label") || DEFAULT_MEMBER_LABEL;
     if (this.$wrap) this.render();
   }
@@ -382,6 +415,80 @@ export class ChefPanelElement extends Base {
   /** The brand mark: Chef for admins, a neutral lightbulb for everyone else. */
   mark() { return this.admin ? BRAND : BULB; }
   sentMessage() { return this.admin ? "Sent to Chef" : "Your request was sent"; }
+
+  // ------------------------------------------------------------ what's new
+
+  /**
+   * Once per page load: compare what shipped against what this browser last saw.
+   * First visit → just remember "now" (no backlog dump). Old backends without
+   * `whatsNew` (or any failure) → silently skip.
+   */
+  checkWhatsNew() {
+    if (this._wnChecked || this.getAttribute("whats-new") === "off") return;
+    this._wnChecked = true;
+    const key = `chef-whatsnew-seen:${this.fnPrefix}`;
+    let since;
+    try {
+      const raw = localStorage.getItem(key);
+      since = raw == null ? NaN : Number(raw);
+      if (!Number.isFinite(since)) { localStorage.setItem(key, String(Date.now())); return; }
+    } catch { return; } // storage blocked: we couldn't remember a dismissal, so never nag
+    const fetchedAt = Date.now();
+    this.client.query(this.ref("whatsNew"), { since })
+      .then((rows) => {
+        if (!Array.isArray(rows) || !rows.length || !this.isConnected || this.getAttribute("whats-new") === "off") return;
+        this.showWhatsNew(rows, () => { try { localStorage.setItem(key, String(fetchedAt)); } catch {} });
+      })
+      .catch(() => {});
+  }
+
+  showWhatsNew(rows, markSeen) {
+    if (!this.shadowRoot) return;
+    this.closeWhatsNew(false);
+    const MAX = 6;
+    const shown = rows.slice(0, MAX);
+    const more = rows.length - shown.length;
+    const el = document.createElement("div");
+    el.className = "wn";
+    el.setAttribute("role", "region");
+    el.setAttribute("aria-label", "What's new");
+    el.setAttribute("aria-live", "polite");
+    el.innerHTML = `
+      <div class="wh"><span class="wmark"></span><b>What's new</b>
+        <button class="wx" type="button" aria-label="Close what's new" title="Close">×</button></div>
+      <ul>${shown.map((r) => `<li><span class="wt">${esc(r.text)}</span><span class="wd">${esc(relTime(r.at))}</span></li>`).join("")}</ul>
+      ${more > 0 ? `<div class="wm">and ${more} more</div>` : ""}
+      <div class="wf"><button class="act" type="button">Got it</button></div>`;
+    this._wnSeen = markSeen;
+    el.querySelector(".wx").onclick = () => this.closeWhatsNew(true);
+    el.querySelector(".act").onclick = () => this.closeWhatsNew(true);
+    this._wnKey = (e) => { if (e.key === "Escape" && this.$wn && !this.$wn.hidden && !this.$comp && !this.$ann) this.closeWhatsNew(true); };
+    document.addEventListener("keydown", this._wnKey);
+    this.shadowRoot.appendChild(el);
+    this.$wn = el;
+    this.syncWhatsNew();
+  }
+
+  /** Remove the card; `seen` records the dismissal so it won't come back. */
+  closeWhatsNew(seen) {
+    if (this._wnKey) { document.removeEventListener("keydown", this._wnKey); this._wnKey = null; }
+    if (seen && this._wnSeen) this._wnSeen();
+    this._wnSeen = null;
+    if (this.$wn) { this.$wn.remove(); this.$wn = null; }
+  }
+
+  /** Keep the card's mark in step with the viewer's role; tuck it away while the panel/composer is up. */
+  syncWhatsNew() {
+    const el = this.$wn;
+    if (!el) return;
+    el.hidden = !!(this.open || this.$comp || this.$ann);
+    const mark = el.querySelector(".wmark");
+    const want = this.admin ? "admin" : "member";
+    if (mark && mark.dataset.kind !== want) {
+      mark.dataset.kind = want;
+      mark.innerHTML = this.admin ? BRAND : SPARK;
+    }
+  }
 
   showToast(msg) {
     if (!this.shadowRoot) return;
@@ -437,6 +544,7 @@ export class ChefPanelElement extends Base {
       }
       return;
     }
+    this.syncWhatsNew();
     if (!this.open) return this.renderFab();
     this.renderPanel();
   }
@@ -718,6 +826,7 @@ export class ChefPanelElement extends Base {
     this.$comp = document.createElement("div");
     this.$comp.className = "comp";
     this.shadowRoot.appendChild(this.$comp);
+    this.syncWhatsNew();
     this.$wrap.style.display = "none";
     this.renderComposer();
     if (!this._fetchToken) this.c.note = "Sending needs a signed-in user — sign in first.";
@@ -1072,6 +1181,20 @@ function ago(ms) {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
+}
+/** "just now", "5 minutes ago", "yesterday", "2 days ago", "3 weeks ago", or a date. */
+function relTime(ms) {
+  const s = Math.max(0, Math.round((Date.now() - Number(ms)) / 1000));
+  const n = (k, unit) => `${k} ${unit}${k === 1 ? "" : "s"} ago`;
+  if (s < 60) return "just now";
+  if (s < 3600) return n(Math.floor(s / 60), "minute");
+  if (s < 86400) return n(Math.floor(s / 3600), "hour");
+  const d = Math.floor(s / 86400);
+  if (d === 1) return "yesterday";
+  if (d < 7) return n(d, "day");
+  if (d < 35) return n(Math.floor(d / 7), "week");
+  try { return new Date(Number(ms)).toLocaleDateString(undefined, { month: "short", day: "numeric", year: d > 300 ? "numeric" : undefined }); }
+  catch { return n(Math.floor(d / 30), "month"); }
 }
 // A half-typed request survives reloads (per tab). Best effort only.
 function readDraft(key) { try { return sessionStorage.getItem(key) || ""; } catch { return ""; } }
