@@ -110,6 +110,26 @@ export class Feedback {
       args: { limit?: number } & ActorArgs = {},
     ) => ctx.runQuery(this.component.items.listAwaitingApproval, args),
 
+    /**
+     * The requests `userId` filed (not refinements), newest first, with attachment counts.
+     * Forward the AUTHENTICATED user's id — this is "my requests", not a privileged read.
+     */
+    listByCreator: (
+      ctx: RunQueryCtx,
+      args: { userId: string; limit?: number },
+    ): Promise<
+      Array<{
+        _id: string;
+        _creationTime: number;
+        number: number;
+        title: string;
+        state: ItemState;
+        mergedInto?: string;
+        screenshotCount: number;
+        hasAudio: boolean;
+      }>
+    > => ctx.runQuery(this.component.items.listByCreator, args),
+
     /** An admin approves (→ "requested") or rejects (→ "rejected") a submitted request. */
     review: (
       ctx: RunMutationCtx,
@@ -347,3 +367,7 @@ export class Feedback {
     ) => ctx.runMutation(this.component.settings.set, args),
   };
 }
+
+// One-file drop-in: ready-made public functions for the Chef web panel and iOS ChefKit.
+export { exposeChefApi } from "./chef.js";
+export type { ChefApiOptions, ChefSubmission } from "./chef.js";
