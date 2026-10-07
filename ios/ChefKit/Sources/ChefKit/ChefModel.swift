@@ -36,6 +36,18 @@ final class ChefModel {
     var buttonAlignment: Alignment = .bottomLeading
     var buttonInsets = EdgeInsets(top: 20, leading: 20, bottom: 76, trailing: 20)
 
+    /// Admins see Chef (build status, questions, approvals); everyone else sees a neutral
+    /// "Suggest a feature" UI. Non-admin until `<prefix>:amAdmin` says otherwise.
+    @ObservationIgnored let adminLive = ChefLive<Bool>()
+    var isAdmin: Bool { adminLive.value == true }
+    var memberButton = ChefMemberButton()
+
+    /// Subscribes to `<prefix>:amAdmin` (again) for the current client.
+    func bindAdmin() {
+        adminLive.reset()
+        adminLive.bind("amAdmin")
+    }
+
     private(set) var toast: ChefToast?
     let outbox = ChefOutbox()
 

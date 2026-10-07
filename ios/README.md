@@ -2,6 +2,20 @@
 
 Drop-in SwiftUI client for the Chef feedback component. Two lines give any iOS 17+ app:
 
+**Only admins see "Chef".** ChefKit subscribes to `<prefix>:amAdmin` at install and treats everyone as a member
+until it hears back:
+
+| | Admins | Members / signed out |
+| --- | --- | --- |
+| Floating button | Chef hat + "Chef" | Neutral lightbulb, labelled "Suggest a feature" (`ChefKit.memberButton`) |
+| Long-press | Screenshot + voice composer ("Tell Chef") | Same composer, neutral copy ("Request a feature") |
+| Tap | Approvals, Chef's questions, *Building now*, *Lately*, your requests | "Feature requests": *Request a feature* + your own requests |
+| Sent toast | "Sent to Chef" | "Your request was sent" |
+
+Request states read: Waiting for approval (submitted), Planned (requested), In progress, Done, Declined.
+
+Everything ChefKit adds:
+
 - a floating **Chef button** in its own window (floats over your sheets; taps elsewhere pass through)
 - **long-press** → screenshot of the current screen + composer already recording a voice note with a live transcript
 - **tap** → sheet with *New request*, Chef's clarifying questions, what's being built, your requests and their status, and — for admins — the **approval queue**
@@ -53,6 +67,7 @@ Optional knobs:
 ```swift
 ChefKit.isHidden = true                       // hide the button (e.g. during your own recording UI)
 SomeView().chefHidden()                       // …or hide it while a view is on screen
+ChefKit.memberButton = .init(title: "Send feedback", systemImage: "bubble.left", showsTitle: true) // non-admins
 ChefKit.buttonAlignment = .bottomTrailing     // default .bottomLeading
 ChefKit.buttonInsets = EdgeInsets(top: 0, leading: 20, bottom: 90, trailing: 20)
 ChefKit.present()                             // open the Chef sheet from your own UI
@@ -92,7 +107,7 @@ ChefKit prints a `⚠️ ChefKit:` line to the console at install if either is m
 ## Admins
 
 Requests from non-admins land in state `submitted` and wait for approval (admin requests skip straight to the
-queue). When `chef:amAdmin` is true, the Chef sheet shows **Waiting for your approval** at the top: title, who sent
+queue). When `chef:amAdmin` is true, the button becomes the Chef hat and the Chef sheet shows **Waiting for your approval** at the top: title, who sent
 it and when, details, screenshots, a *Play voice note* button, and **Approve** (→ build queue) / **Reject**.
 Admins also see *Building now* and *Lately* (the build agent's todos and progress). Make someone an admin with the
 component's users/roles API (see the root README).

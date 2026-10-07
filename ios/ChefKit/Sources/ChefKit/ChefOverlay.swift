@@ -157,16 +157,28 @@ struct ChefMark: View {
     }
 }
 
+/// Admins: the Chef hat. Everyone else: a neutral "Suggest a feature" button (no Chef branding).
 struct ChefButton: View {
     @Environment(ChefModel.self) private var model
 
     var body: some View {
         let pending = model.outbox.items.count
+        let admin = model.isAdmin
+        let member = model.memberButton
+        let name = admin ? "Chef: feature requests" : member.title
         ZStack(alignment: .topTrailing) {
-            ChefMark()
+            Group {
+                if admin {
+                    ChefMark()
+                } else if member.showsTitle {
+                    Label(member.title, systemImage: member.systemImage).font(.subheadline.weight(.semibold))
+                } else {
+                    Image(systemName: member.systemImage).font(.title3.weight(.semibold))
+                }
+            }
                 .foregroundStyle(.primary)
-                .padding(.horizontal, 14)
-                .frame(minWidth: 44, minHeight: 44)
+                .padding(.horizontal, admin || member.showsTitle ? 14 : 0)
+                .frame(minWidth: 48, minHeight: 48)
                 .background(Capsule().fill(.regularMaterial))
                 .overlay(Capsule().strokeBorder(Color(uiColor: .separator), lineWidth: 0.5))
                 .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
@@ -180,8 +192,8 @@ struct ChefButton: View {
         .onTapGesture { model.showSheet = true; ChefHaptics.tap() }
         .onLongPressGesture(minimumDuration: 0.45) { model.longPress() }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(pending > 0 ? "Chef: feature requests, \(pending) waiting to send" : "Chef: feature requests")
-        .accessibilityHint("Tap to see requests. Long-press to report something on this screen with a screenshot.")
+        .accessibilityLabel(pending > 0 ? "\(name), \(pending) waiting to send" : name)
+        .accessibilityHint("Tap to see your requests. Long-press to suggest something about this screen, with a screenshot.")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { model.showSheet = true }
         .accessibilityAction(named: "Report this screen") { model.longPress() }

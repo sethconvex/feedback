@@ -134,7 +134,7 @@ enum ChefErrors {
     /// What to show a person: plain words, never request ids or function names.
     static func friendly(_ error: Error) -> String {
         if error is URLError { return "You're offline. Try again when you're connected." }
-        if isUnauthenticated(error) { return "Sign in to send requests to Chef." }
+        if isUnauthenticated(error) { return "Sign in to send requests." }
         let m = message(error)
         if m.isEmpty || m.contains("[CONVEX") || m.contains("Request ID") || m.contains("Server Error")
             || m.contains("Could not find public function") {

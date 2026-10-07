@@ -1,7 +1,7 @@
 import PencilKit
 import SwiftUI
 
-/// "Tell Chef": screenshots (with markup), a title, details, and a voice note with live transcript.
+/// "Tell Chef" (admins) / "Suggest a feature" (everyone else): screenshots (with markup), a title, details, and a voice note with live transcript.
 struct ChefComposer: View {
     @Environment(ChefModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -38,7 +38,8 @@ struct ChefComposer: View {
                             }
                             if ChefRequirements.hasMicrophoneKey {
                                 Button { draft.startRecording() } label: {
-                                    Label(draft.audioFile == nil ? "Tell Chef by voice" : "Record more for Chef", systemImage: "waveform")
+                                    Label(draft.audioFile == nil ? (admin ? "Tell Chef by voice" : "Say it out loud")
+                                              : (admin ? "Record more for Chef" : "Record more"), systemImage: "waveform")
                                         .font(.subheadline.weight(.semibold))
                                         .frame(minHeight: 44)
                                 }
@@ -55,11 +56,17 @@ struct ChefComposer: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Text("Tell").font(.headline)
-                        ChefMark()
+                    Group {
+                        if admin {
+                            HStack(spacing: 6) {
+                                Text("Tell").font(.headline)
+                                ChefMark()
+                            }
+                            .accessibilityElement(children: .ignore).accessibilityLabel("Tell Chef")
+                        } else {
+                            Text("Request a feature").font(.headline)
+                        }
                     }
-                    .accessibilityElement(children: .ignore).accessibilityLabel("Tell Chef")
                     .accessibilityAddTraits(.isHeader)
                 }
                 ToolbarItem(placement: .cancellationAction) { Button("Discard") { model.discard(draft) } }
@@ -83,12 +90,15 @@ struct ChefComposer: View {
         .interactiveDismissDisabled(draft.recorder.state != .idle)
     }
 
+    private var admin: Bool { model.isAdmin }
+
     private struct AnnotIndex: Identifiable { let i: Int; var id: Int { i } }
 
     private var footnote: String {
         let n = draft.shots.count
         let place = draft.context.label ?? "this screen"
-        return "Goes to Chef with \(n) screenshot\(n == 1 ? "" : "s") from \(place)."
+        let shots = "\(n) screenshot\(n == 1 ? "" : "s")"
+        return admin ? "Goes to Chef with \(shots) from \(place)." : "Sent with \(shots) from \(place)."
     }
 
     private var shotsRow: some View {
@@ -146,7 +156,7 @@ struct ChefComposer: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Circle().fill(Color.orange).frame(width: 9, height: 9).accessibilityHidden(true)
-                Text("Recording for Chef — what should change?").font(.subheadline.weight(.semibold))
+                Text(admin ? "Recording for Chef — what should change?" : "Recording — what should change?").font(.subheadline.weight(.semibold))
             }
             ChefWaveform(samples: samples)
                 .frame(height: 40)
@@ -162,7 +172,7 @@ struct ChefComposer: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel(draft.recorder.transcript.isEmpty ? "Listening" : draft.recorder.transcript)
             Button { draft.stopRecording() } label: {
-                Label("Done telling Chef", systemImage: "stop.fill").frame(maxWidth: .infinity).frame(minHeight: 36)
+                Label(admin ? "Done telling Chef" : "Done recording", systemImage: "stop.fill").frame(maxWidth: .infinity).frame(minHeight: 36)
             }
             .buttonStyle(.borderedProminent).tint(.orange)
         }

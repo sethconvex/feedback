@@ -55,7 +55,8 @@ struct ChefPendingApproval: Decodable, Sendable, Identifiable {
 
 // MARK: - Sheet
 
-/// Tap on the Chef button: new request, Chef's questions, approvals (admins), your requests.
+/// Tap on the floating button. Admins: new request, approvals, Chef's questions, build status,
+/// their requests. Everyone else ("Feature requests"): request a feature + their own requests.
 struct ChefSheet: View {
     @Environment(ChefModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -71,15 +72,19 @@ struct ChefSheet: View {
                         dismiss()
                         Task { try? await Task.sleep(for: .milliseconds(400)); model.newRequest() }
                     } label: {
-                        Label("New request", systemImage: "plus.bubble.fill").font(.headline).frame(minHeight: 44)
+                        Label(admin ? "New request" : "Request a feature", systemImage: admin ? "plus.bubble.fill" : "plus.circle.fill")
+                            .font(.headline).frame(minHeight: 44)
                     }
-                    Text("Tip: long-press the Chef button on any screen to send a screenshot and say what you want.")
+                    Text(admin ? "Tip: long-press the Chef button on any screen to send a screenshot and say what you want."
+                         : "Tip: long-press the \(model.memberButton.title.lowercased()) button on any screen to send a screenshot and say what you want.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
-                ChefApprovalsSection()
+                if admin { ChefApprovalsSection() }
                 outboxSection
-                questionsSection
-                buildingSection
+                if admin {
+                    questionsSection
+                    buildingSection
+                }
                 Section("Your requests") {
                     let all = mine.value ?? []
                     if all.isEmpty {
@@ -110,7 +115,7 @@ struct ChefSheet: View {
                         .accessibilityElement(children: .combine)
                     }
                 }
-                let shipped = (agent.value?.progress ?? []).prefix(8)
+                let shipped = admin ? (agent.value?.progress ?? []).prefix(8) : []
                 if !shipped.isEmpty {
                     Section("Lately") {
                         ForEach(Array(shipped)) { p in
@@ -121,16 +126,23 @@ struct ChefSheet: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) { ChefMark().accessibilityAddTraits(.isHeader) }
+                ToolbarItem(placement: .principal) {
+                    Group {
+                        if admin { ChefMark() } else { Text("Feature requests").font(.headline) }
+                    }
+                    .accessibilityAddTraits(.isHeader)
+                }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
-            .task {
-                agent.bind("agentState")
+            .task(id: admin) {
+                if admin { agent.bind("agentState") } else { agent.reset() }
                 mine.bind("mine")
                 model.outbox.kick(force: true)
             }
         }
     }
+
+    private var admin: Bool { model.isAdmin }
 
     @ViewBuilder private var outboxSection: some View {
         let items = model.outbox.items
@@ -210,11 +222,11 @@ struct ChefStateBadge: View {
     let state: String?
     var body: some View {
         let (label, color): (String, Color) = switch state {
-        case "submitted": ("awaiting approval", .purple)
-        case "inProgress": ("in progress", .blue)
-        case "completed": ("done", .green)
-        case "rejected": ("skipped", .secondary)
-        default: ("requested", .orange)
+        case "submitted": ("Waiting for approval", .purple)
+        case "inProgress": ("In progress", .blue)
+        case "completed": ("Done", .green)
+        case "rejected": ("Declined", .secondary)
+        default: ("Planned", .orange) // requested / planned
         }
         Text(label).font(.caption2.weight(.bold)).foregroundStyle(color)
             .padding(.horizontal, 7).padding(.vertical, 3)
@@ -229,13 +241,12 @@ struct ChefStateBadge: View {
 /// (`<prefix>:amAdmin`); `awaitingApproval` returns [] for everyone else anyway.
 struct ChefApprovalsSection: View {
     @Environment(ChefModel.self) private var model
-    @State private var isAdmin = ChefLive<Bool>()
     @State private var pending = ChefLive<[ChefPendingApproval]>()
     @State private var busy: Set<String> = []
 
     var body: some View {
         Group {
-            if isAdmin.value == true, let list = pending.value, !list.isEmpty {
+            if model.isAdmin, let list = pending.value, !list.isEmpty {
                 Section {
                     ForEach(list) { r in row(r) }
                 } header: {
@@ -246,7 +257,6 @@ struct ChefApprovalsSection: View {
             }
         }
         .task {
-            isAdmin.bind("amAdmin")
             pending.bind("awaitingApproval")
         }
     }

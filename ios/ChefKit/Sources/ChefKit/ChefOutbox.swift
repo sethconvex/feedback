@@ -83,7 +83,8 @@ final class ChefOutbox {
                 do {
                     try await send(r)
                     remove(r)
-                    if announce { ChefModel.shared.showToast("Sent to Chef", symbol: "checkmark.seal.fill") }
+                    if announce { ChefModel.shared.showToast(ChefModel.shared.isAdmin ? "Sent to Chef" : "Your request was sent",
+                                                          symbol: "checkmark.seal.fill") }
                 } catch {
                     var r2 = r
                     r2.attempts += 1
@@ -96,7 +97,7 @@ final class ChefOutbox {
                     }
                     if announce {
                         let msg = ChefErrors.isUnauthenticated(error) ? "Saved — sends when you're signed in"
-                            : ChefErrors.isMissingFunction(error) ? "Saved — sends to Chef as soon as it's ready"
+                            : ChefErrors.isMissingFunction(error) ? "Saved — will send as soon as it can"
                             : "Saved — will send when online"
                         ChefModel.shared.showToast(msg, symbol: "tray.and.arrow.up")
                     }

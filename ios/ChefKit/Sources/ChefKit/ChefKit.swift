@@ -17,6 +17,22 @@ public struct ChefContext: Sendable, Hashable {
     }
 }
 
+/// How the floating button looks to non-admins.
+public struct ChefMemberButton: Sendable, Hashable {
+    /// The accessibility label, and the visible text when `showsTitle` is true.
+    public var title: String
+    /// An SF Symbol name.
+    public var systemImage: String
+    /// Show the title next to the icon (default: icon only).
+    public var showsTitle: Bool
+
+    public init(title: String = "Suggest a feature", systemImage: String = "lightbulb", showsTitle: Bool = false) {
+        self.title = title
+        self.systemImage = systemImage
+        self.showsTitle = showsTitle
+    }
+}
+
 /// The drop-in Chef feedback UI.
 ///
 /// ```swift
@@ -43,6 +59,7 @@ public enum ChefKit {
         let m = ChefModel.shared
         m.backend = UnsafeBox(client)
         m.prefix = prefix
+        m.bindAdmin()
         ChefRequirements.check()
         ChefOverlay.installWhenReady()
         m.outbox.kick()
@@ -52,6 +69,14 @@ public enum ChefKit {
     public static func uninstall() {
         ChefOverlay.uninstall()
         ChefModel.shared.backend = nil
+        ChefModel.shared.adminLive.reset()
+    }
+
+    /// The floating button non-admins see (admins see the Chef button).
+    /// Default: a lightbulb labelled "Suggest a feature".
+    public static var memberButton: ChefMemberButton {
+        get { ChefModel.shared.memberButton }
+        set { ChefModel.shared.memberButton = newValue }
     }
 
     /// Where requests come from. Called when a request is started.
