@@ -27,6 +27,11 @@ export type {
   ChefProgress,
 } from "./ChefPanel.js";
 
+// One-line mount for the <chef-panel> web component (panel/chef-panel.browser.js),
+// talking to the functions exposeChefApi creates.
+export { ChefPanelMount } from "./ChefPanelMount.js";
+export type { ChefPanelMountProps } from "./ChefPanelMount.js";
+
 type AnyQuery<Args extends Record<string, any>, Returns = any> =
   FunctionReference<"query", "public", Args, Returns>;
 type AnyMutation<Args extends Record<string, any>, Returns = any> =

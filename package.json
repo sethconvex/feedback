@@ -22,6 +22,10 @@
       "types": "./react/src/index.tsx",
       "default": "./react/src/index.tsx"
     },
+    "./panel": {
+      "types": "./panel/chef-panel.browser.d.ts",
+      "default": "./panel/chef-panel.browser.js"
+    },
     "./_generated/component": {
       "types": "./_generated/component.ts"
     },
@@ -32,6 +36,7 @@
   "files": [
     "src",
     "react",
+    "panel",
     "convex.config.ts",
     "schema.ts",
     "items.ts",
