@@ -574,3 +574,54 @@ export const review = mutation({
     return state;
   },
 });
+
+// ---------- a requester's own items ----------
+
+/**
+ * One user's own requests (not refinements), newest first, with attachment counts — powers a
+ * "your requests" list. The host forwards the AUTHENTICATED userId; it is not a privileged read
+ * (everyone may see what they filed themselves).
+ */
+export const listByCreator = query({
+  args: { userId: v.string(), limit: v.optional(v.number()) },
+  returns: v.array(
+    v.object({
+      _id: v.id("items"),
+      _creationTime: v.number(),
+      number: v.number(),
+      title: v.string(),
+      state: vState,
+      mergedInto: v.optional(v.id("items")),
+      screenshotCount: v.number(),
+      hasAudio: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const limit = Math.min(100, Math.max(1, args.limit ?? 50));
+    const rows = await ctx.db
+      .query("items")
+      .withIndex("by_createdBy", (q) => q.eq("createdBy", args.userId))
+      .order("desc")
+      .take(limit * 2);
+    const mine = rows.filter((i) => i.kind !== "refinement").slice(0, limit);
+    return await Promise.all(
+      mine.map(async (i) => {
+        // Bounded by the per-item attachment caps (≤4 screenshots + 1 voice note).
+        const files = await ctx.db
+          .query("attachments")
+          .withIndex("by_itemId", (q) => q.eq("itemId", i._id))
+          .take(10);
+        return {
+          _id: i._id,
+          _creationTime: i._creationTime,
+          number: i.number,
+          title: i.title,
+          state: i.state,
+          ...(i.mergedInto ? { mergedInto: i.mergedInto } : {}),
+          screenshotCount: files.filter((f) => f.kind === "screenshot").length,
+          hasAudio: files.some((f) => f.kind === "audio"),
+        };
+      }),
+    );
+  },
+});

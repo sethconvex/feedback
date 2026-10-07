@@ -272,6 +272,28 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Array<any>,
         Name
       >;
+      listByCreator: FunctionReference<
+        "query",
+        "internal",
+        { limit?: number; userId: string },
+        Array<{
+          _creationTime: number;
+          _id: string;
+          hasAudio: boolean;
+          mergedInto?: string;
+          number: number;
+          screenshotCount: number;
+          state:
+            | "submitted"
+            | "requested"
+            | "planned"
+            | "inProgress"
+            | "rejected"
+            | "completed";
+          title: string;
+        }>,
+        Name
+      >;
       listByState: FunctionReference<
         "query",
         "internal",
