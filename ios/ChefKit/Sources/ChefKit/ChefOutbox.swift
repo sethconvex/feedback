@@ -191,4 +191,19 @@ enum ChefSnapshot {
         let r = UIGraphicsImageRenderer(bounds: window.bounds)
         return r.image { _ in _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
     }
+
+    /// The app with ChefKit's own sheet (e.g. What's new) drawn on top: for feedback about
+    /// ChefKit's UI itself, where the plain snapshot would leave the sheet out.
+    static func captureWithOverlay() -> UIImage? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first else { return nil }
+        let windows = scene.windows.filter { !$0.isHidden }.sorted { $0.windowLevel < $1.windowLevel }
+        guard let base = windows.first(where: { !ChefOverlay.isOverlay($0) }) else { return nil }
+        let r = UIGraphicsImageRenderer(bounds: base.bounds)
+        return r.image { _ in
+            for w in windows where w === base || ChefOverlay.isOverlay(w) {
+                _ = w.drawHierarchy(in: base.bounds, afterScreenUpdates: false)
+            }
+        }
+    }
 }

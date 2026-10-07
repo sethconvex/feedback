@@ -170,10 +170,19 @@ struct ChefWhatsNewSheet: View {
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 8) {
                         if model.isAdmin { ChefMark(height: 22) }
-                        Text("What's new").font(.headline)
+                        Text("What's new").font(.headline).lineLimit(1)
                     }
+                    .fixedSize()
                     .accessibilityElement(children: .combine)
                     .accessibilityAddTraits(.isHeader)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    // The Chef button sits under this sheet, so feedback about it starts here.
+                    Button { model.requestFromSheet() } label: {
+                        Image(systemName: "bubble.left.and.text.bubble.right")
+                    }
+                    .accessibilityLabel("Send feedback about this")
+                    .accessibilityHint("Takes a screenshot of this sheet and opens a request")
                 }
             }
         }

@@ -118,6 +118,21 @@ final class ChefModel {
         d.startRecording()
     }
 
+    /// Feedback from inside a ChefKit sheet (What's new): snapshot it as shown, then swap the
+    /// sheet for the composer.
+    func requestFromSheet() {
+        guard draft == nil, capturing == nil else { return }
+        let img = ChefSnapshot.captureWithOverlay()
+        ChefHaptics.thunk()
+        whatsNew = nil
+        showSheet = false
+        let d = ChefDraft(shots: img.map { [$0] } ?? [], context: ChefKit.context())
+        Task {
+            try? await Task.sleep(for: .milliseconds(450)) // one sheet at a time
+            if self.draft == nil, self.capturing == nil { self.draft = d }
+        }
+    }
+
     func newRequest() {
         draft = ChefDraft(shots: [], context: ChefKit.context())
     }
